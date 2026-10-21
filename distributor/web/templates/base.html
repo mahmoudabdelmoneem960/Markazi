@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Markazi{% endblock %} · Markazi</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+{% if use_map %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+{% endif %}
+<script src="{{ url_for('static', filename='js/common.js') }}"></script>
+{% if use_map %}<script src="{{ url_for('static', filename='js/map.js') }}"></script>{% endif %}
+</head>
+<body>
+{% if current_user.is_authenticated %}
+<header class="top"><div class="in">
+  <nav class="menu">
+    <a href="/">التشغيلات</a>
+    <a href="/runs/new">تشغيل جديد</a>
+    <a href="/centers">المراكز</a>
+    <a href="/review">مراجعة المواقع</a>
+    <a href="/compare">مقارنة</a>
+    <a href="/settings">الإعدادات</a>
+  </nav>
+  <div class="brand">Markazi <span class="mute" style="font-weight:400;font-size:13px">توزيع الطلاب على المراكز</span> <small>إصدار {{ VERSION }}</small>
+    <form method="post" action="/logout" style="display:inline"><button class="sec sm" type="submit">خروج</button></form></div>
+</div></header>
+{% endif %}
+<main>
+{% block body %}{% endblock %}
+</main>
+<p class="hint" style="text-align:center">بيانات الخرائط: © OpenStreetMap contributors (ODbL)، وأماكن من GeoNames (CC BY 4.0).</p>
+{% block scripts %}{% endblock %}
+</body>
+</html>

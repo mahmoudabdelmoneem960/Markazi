@@ -1,0 +1,32 @@
+{% extends "base.html" %}{% block title %}المراكز{% endblock %}
+{% block body %}
+<h1>المراكز</h1>
+<p class="sub">قاعدة بيانات مواقع المراكز. أي تصحيح بيتحفظ وبيتطبق في كل توزيع جاي، وبيتغلب على الشيت.</p>
+<div class="kpis" id="kpis"></div>
+<div class="card" style="margin-top:14px">
+  <div class="row">
+    <label style="margin:0">استيراد شيت مراكز: <input type="file" id="imp" class="inline" accept=".xlsx,.xls,.csv"></label>
+    <button class="sec sm" onclick="doImport()">استيراد</button>
+    <button class="sec sm" id="vbtn" onclick="verifyLinks()">تحقق من لينكات Google (بطيء)</button>
+    <button class="sec sm" id="gbtn" onclick="googleVerify()">تحقق بـ Google API</button>
+    <select id="gscope" class="inline"><option value="unverified">غير المتأكد منها</option><option value="all">كل المراكز</option></select>
+    <button class="del sm" id="gcancel" onclick="googleCancel()" hidden>إلغاء فحص جوجل</button>
+    <a class="btn sec sm" href="/api/centers.csv">تصدير CSV (لـ QGIS)</a>
+  </div>
+  <div class="hint" id="cmsg"></div><div class="hint" id="gmsg"></div><div class="hint" id="gres"></div>
+</div>
+<div class="split">
+  <div class="card">
+    <div class="row"><input type="text" id="cq" class="inline" placeholder="بحث (كود/اسم/محافظة/منطقة)" oninput="draw()" style="min-width:240px">
+      <label style="margin:0"><input type="checkbox" id="cflag" onchange="draw()"> اللي فيهم تحذيرات بس</label></div>
+    <div class="scroll tall"><table id="ct"></table></div>
+    <p class="hint">اضغط على صف عشان الخريطة تروح للمركز. لتعديل الموقع: اسحب الدبوس على الخريطة، أو الصق إحداثيات/لينك Google في خانة التعديل.</p>
+  </div>
+  <div class="card">
+    <div id="map" class="map"></div>
+    <div id="sel" class="hint"></div>
+    <div class="row" style="margin-top:8px"><input type="text" id="ci" class="inline" placeholder="lat, lon أو لينك Google" style="min-width:260px"><button class="sm" id="csave" onclick="saveSel()" disabled>حفظ للمركز المختار</button><span class="msg" id="cm"></span></div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/centers.js') }}"></script>{% endblock %}

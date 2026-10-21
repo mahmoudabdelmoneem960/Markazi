@@ -1,0 +1,13 @@
+{% extends "base.html" %}{% block title %}تسجيل الدخول{% endblock %}
+{% block body %}
+<div class="card login">
+  <h1>Markazi</h1>
+  <p class="sub">سيستم توزيع الطلاب على المراكز — تسجيل الدخول</p>
+  {% if error %}<div class="alert">{{ error }}</div>{% endif %}
+  <form method="post">
+    <label>اسم المستخدم</label><input type="text" name="username" autofocus required>
+    <label style="margin-top:10px">كلمة السر</label><input type="password" name="password" required>
+    <div style="margin-top:14px"><button type="submit">دخول</button></div>
+  </form>
+</div>
+{% endblock %}

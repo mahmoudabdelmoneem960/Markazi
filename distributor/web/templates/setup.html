@@ -1,0 +1,14 @@
+{% extends "base.html" %}{% block title %}إنشاء الأدمن{% endblock %}
+{% block body %}
+<div class="card login">
+  <h1>أول تشغيل: إنشاء حساب الأدمن</h1>
+  <p class="sub">الحساب ده هو اللي هيدخل السيستم. كلمة السر بتتحفظ مشفّرة على جهازك.</p>
+  {% if error %}<div class="alert">{{ error }}</div>{% endif %}
+  <form method="post">
+    <label>اسم المستخدم</label><input type="text" name="username" value="admin" required>
+    <label style="margin-top:10px">كلمة السر (8 حروف على الأقل)</label><input type="password" name="password" required minlength="8">
+    <label style="margin-top:10px">تأكيد كلمة السر</label><input type="password" name="password2" required minlength="8">
+    <div style="margin-top:14px"><button type="submit">إنشاء ودخول</button></div>
+  </form>
+</div>
+{% endblock %}

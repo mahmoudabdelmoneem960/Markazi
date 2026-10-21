@@ -1,0 +1,28 @@
+{% extends "base.html" %}{% block title %}مراجعة مواقع الطلاب{% endblock %}
+{% block body %}
+<h1>مراجعة مواقع الطلاب</h1>
+<p class="sub">مجموعات طلاب (حي/شارع داخل منطقة) موقعهم تقريبي لأن العنوان ما اتحددش بدقة. تصحيح واحد بيتطبق على كل طلاب المجموعة في التوزيع الجاي.</p>
+<div class="kpis" id="rk"></div>
+<div class="split" style="margin-top:14px">
+  <div class="card">
+    <div class="row">
+      <select id="rrun" class="inline" onchange="loadReview()" style="min-width:220px"></select>
+      <input type="text" id="rq" class="inline" placeholder="بحث (منطقة/حي/عنوان)" oninput="loadReview()" style="min-width:200px">
+      <label style="margin:0">أقل عدد <input type="number" id="rn" class="inline" value="3" min="1" style="width:70px" onchange="loadReview()"></label>
+      <button class="sec sm" onclick="more()">عرض أكتر</button>
+    </div>
+    <div class="scroll tall"><table id="rt"></table></div>
+    <h2 style="margin-top:16px">تصحيح طالب واحد</h2>
+    <div class="row"><input type="text" id="sn" class="inline" placeholder="الرقم القومي (14 رقم)" style="width:200px"><input type="text" id="si" class="inline" placeholder="إحداثيات أو لينك Google" style="min-width:220px"><button class="sm" onclick="saveStudent()">حفظ</button><span class="msg" id="smsg"></span></div>
+  </div>
+  <div class="card">
+    <div id="map" class="map"></div>
+    <div id="sel" class="hint">اختار مجموعة من الجدول: الدبوس الأزرق موقعها الحالي. اضغط على الخريطة في المكان الصح (أو اسحب الدبوس) ثم «حفظ».</div>
+    <div class="row" style="margin-top:8px"><input type="text" id="gi" class="inline" placeholder="lat, lon أو لينك Google" style="min-width:260px"><button class="sm" id="gsave" onclick="saveSel()" disabled>حفظ للمجموعة المختارة</button><button class="del sm" id="gdel" onclick="delSel()" hidden>إلغاء التصحيح</button><span class="msg" id="gm"></span></div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>const RUN_ID = {{ run_id|tojson }};</script>
+<script src="{{ url_for('static', filename='js/review.js') }}"></script>
+{% endblock %}

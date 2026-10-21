@@ -1,0 +1,25 @@
+# بيانات حقيقية وملفات كبيرة: ما تترفعش على Git أبدًا
+data/
+!data/README.md
+.venv/
+__pycache__/
+*.pyc
+*.pkl
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+.env
+google_key.txt
+secret.key
+results/
+uploads/
+# ملفات الشيتات الحقيقية (فيها أرقام قومية)
+*.xlsx
+*.xls
+*.csv
+!sample/*.xlsx
+!sample/*.csv
+.pytest_cache/
+.vscode/
+.idea/

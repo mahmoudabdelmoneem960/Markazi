@@ -1,0 +1,35 @@
+{% extends "base.html" %}{% block title %}الإعدادات{% endblock %}
+{% block body %}
+<h1>الإعدادات</h1>
+<div class="grid2">
+  <div class="card"><h2>القيم الافتراضية لشاشة التشغيل</h2>
+    <label>مصدر إحداثيات الطلاب</label>
+    <select id="geo_mode"><option value="addr">من العناوين دايمًا</option><option value="auto">تلقائي</option><option value="sheet">من الشيت بس</option></select>
+    <label style="margin-top:8px">طريقة المسافة</label>
+    <select id="road_mode"><option value="osrm">مسافة الطرق الفعلية (OSRM)</option><option value="factor">تقدير</option></select>
+    <label style="margin-top:8px">عنوان سيرفر OSRM</label><div class="row"><input type="text" id="osrm_url" class="inline" dir="ltr" style="min-width:260px"><button class="sec sm" onclick="checkOsrm()">فحص</button><span class="hint" id="osrm_status" style="margin:0"></span></div>
+    <div class="row" style="margin-top:8px"><div><label>أقصى مسافة (كم)</label><input type="number" id="max_km" class="inline" min="1" style="width:100px"></div>
+      <div><label>معامل التقدير</label><input type="number" id="detour" class="inline" min="1" step="0.05" style="width:100px"></div></div>
+    <div class="row" style="margin-top:12px"><button onclick="saveSettings()">حفظ</button><span class="hint" id="smsg" style="margin:0"></span></div>
+  </div>
+  <div class="card"><h2>الحالة</h2><div id="st"></div>
+    <h2 style="margin-top:14px">المسارات</h2>
+    <table>
+      <tr><th style="position:static">فولدر البيانات</th><td dir="ltr">{{ paths.data }}</td></tr>
+      <tr><th style="position:static">قاعدة البيانات</th><td dir="ltr">{{ paths.db }}</td></tr>
+      <tr><th style="position:static">قاعدة الأماكن</th><td dir="ltr">{{ paths.gazetteer or "مش موجودة" }}</td></tr>
+      <tr><th style="position:static">كاش OSRM</th><td dir="ltr">{{ paths.osrm_cache }}</td></tr>
+      <tr><th style="position:static">مفتاح Google (اختياري)</th><td dir="ltr">{{ paths.google_key }}</td></tr>
+    </table>
+    <div class="hint">خد نسخة احتياطية من فولدر البيانات من وقت للتاني: فيه التصحيحات اليدوية وكل التشغيلات.</div>
+  </div>
+</div>
+<div class="card" style="max-width:520px"><h2>تغيير كلمة السر</h2>
+  <label>الحالية</label><input type="password" id="pw0"><label style="margin-top:8px">الجديدة (8 حروف على الأقل)</label><input type="password" id="pw1">
+  <div class="row" style="margin-top:12px"><button onclick="changePw()">تغيير</button><span class="hint" id="pmsg" style="margin:0"></span></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>const SETTINGS = {{ settings|tojson }};</script>
+<script src="{{ url_for('static', filename='js/settings.js') }}"></script>
+{% endblock %}

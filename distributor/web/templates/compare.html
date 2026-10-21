@@ -1,0 +1,20 @@
+{% extends "base.html" %}{% block title %}مقارنة تشغيلين{% endblock %}
+{% block body %}
+<h1>مقارنة تشغيلين</h1>
+<p class="sub">نفس الطالب راح فين في كل تشغيل؟ المقارنة بالرقم القومي (أو برقم الصف لو مفيش).</p>
+<div class="card"><div class="row">
+  <label style="margin:0">A:</label><select id="a" class="inline" style="min-width:280px"></select>
+  <label style="margin:0">B:</label><select id="b" class="inline" style="min-width:280px"></select>
+  <button onclick="run()">قارن</button><a class="btn sec" id="xl" hidden>تحميل Excel</a><span class="hint" id="msg" style="margin:0"></span>
+</div></div>
+<div id="out" hidden>
+  <div class="card"><h2>الأرقام</h2><div class="scroll"><table id="t_sum"></table></div>
+    <div class="kpis" id="kpis" style="margin-top:12px"></div></div>
+  <div class="card"><h2>حسب المحافظة</h2><div class="scroll"><table id="t_gov"></table></div></div>
+  <div class="card"><h2>طلاب نتيجتهم اتغيرت <span class="small" id="chn"></span></h2><div class="scroll tall"><table id="t_ch"></table></div></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>const A0 = {{ a|tojson }}, B0 = {{ b|tojson }};</script>
+<script src="{{ url_for('static', filename='js/compare.js') }}"></script>
+{% endblock %}

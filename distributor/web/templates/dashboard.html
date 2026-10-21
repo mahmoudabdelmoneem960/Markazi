@@ -1,0 +1,11 @@
+{% extends "base.html" %}{% block title %}التشغيلات{% endblock %}
+{% block body %}
+<h1>التشغيلات</h1>
+<p class="sub">كل توزيع اتعمل محفوظ هنا بمدخلاته ونتايجه. <a class="btn" href="/runs/new" style="margin-right:10px">تشغيل جديد</a></p>
+<div class="kpis" id="kpis"></div>
+<div class="card" style="margin-top:16px">
+  <div class="row"><input type="text" id="q" class="inline" placeholder="بحث بالاسم" oninput="draw()" style="min-width:240px"></div>
+  <div class="scroll tall"><table id="t"></table></div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>{% endblock %}
