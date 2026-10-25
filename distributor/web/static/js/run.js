@@ -1,39 +1,116 @@
 let RES = null, MAP = null, CENTERS = [], cLayer = null, pLayer = null, stopPoll = null;
-const STATUS = {queued: "في الانتظار", running: "شغال", files: "بيجهّز الملفات", done: "تم", error: "خطأ", cancelled: "اتلغى"};
+const STATUS = {queued: "في الانتظار", running: "جاري التوزيع", files: "تجهيز التقارير", done: "تم التوزيع بنجاح", error: "خطأ", cancelled: "ملغي"};
 
-function tab(k) { $$(".tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === k)); ["sum", "map", "whatif"].forEach(t => { $("#tab-" + t).hidden = t !== k; });
-  if (k === "map") initMap(); history.replaceState(null, "", "#" + k); }
+function setStatus(text, cls) {
+  const p = $("#pstat_pill") || $("#pstat");
+  if (p) {
+    p.textContent = text;
+    p.className = "pill " + (cls || (text.includes("تم") ? "ok" : text.includes("خطأ") ? "bad" : "brand"));
+  }
+}
+
+function tab(k) {
+  $$(".tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === k));
+  ["sum", "map", "whatif"].forEach(t => {
+    const el = $("#tab-" + t);
+    if (el) el.hidden = (t !== k);
+  });
+  if (k === "map") initMap();
+  history.replaceState(null, "", "#" + k);
+}
 
 async function init() {
-  $("#pstat").textContent = STATUS[RUN.status] || RUN.status;
-  if (RUN.status === "done" || RUN.status === "files") { await loadResult(); }
+  setStatus(STATUS[RUN.status] || RUN.status);
+  if (RUN.status === "done" || RUN.status === "files") {
+    await loadResult();
+  }
   if (["queued", "running", "files"].includes(RUN.status) && RUN.job_id) {
-    $("#progress").hidden = false;
+    if ($("#progress")) $("#progress").hidden = false;
     stopPoll = pollJob(RUN.job_id, {onTick: onTick, onDone: onDone, onError: onErr});
   } else if (RUN.status === "error" || RUN.status === "cancelled") {
-    $("#errbox").hidden = false; $("#errtxt").textContent = (RUN.status === "cancelled" ? "اتلغى التشغيل. " : "حصل خطأ: ") + (RUN.error || "");
+    if ($("#errbox")) $("#errbox").hidden = false;
+    if ($("#errtxt")) $("#errtxt").textContent = (RUN.status === "cancelled" ? "تم إلغاء التشغيل. " : "حدث خطأ: ") + (RUN.error || "");
     if (RUN.files && RUN.files.result) await loadResult();
   }
   loadRunsForCompare();
-  if (location.hash === "#map") tab("map"); else if (location.hash === "#whatif") tab("whatif");
+  if (location.hash === "#map") tab("map");
+  else if (location.hash === "#whatif") tab("whatif");
 }
+
 let shown = false;
 async function onTick(j) {
-  $("#pbar").style.width = Math.max(2, j.progress || 0) + "%"; $("#pmsg").textContent = j.message || ""; $("#ptime").textContent = "⏱ " + fmtSec(j.elapsed);
-  $("#pstat").textContent = STATUS[j.state] || j.state;
-  if (j.result && j.result.result_ready && !shown) { shown = true; await loadResult(); $("#cancel").hidden = true; }
+  if ($("#pbar")) $("#pbar").style.width = Math.max(2, j.progress || 0) + "%";
+  if ($("#pmsg")) $("#pmsg").textContent = j.message || "";
+  if ($("#ptime")) $("#ptime").textContent = "⏱ " + fmtSec(j.elapsed);
+  setStatus(STATUS[j.state] || j.state);
+  if (j.result && j.result.result_ready && !shown) {
+    shown = true;
+    await loadResult();
+    if ($("#cancel")) $("#cancel").hidden = true;
+  }
   if (shown) renderDl(j.files, j.result_elapsed);
 }
-async function onDone(j) { $("#progress").hidden = true; $("#pstat").textContent = "تم"; if (!shown) await loadResult(); renderDl("ready", j.result_elapsed); toast("خلص التوزيع ✓", "ok"); }
-async function onErr(j) { $("#progress").hidden = true; $("#errbox").hidden = false; $("#errtxt").textContent = j.state === "cancelled" ? "اتلغى التشغيل." : "خطأ: " + (j.error || ""); $("#pstat").textContent = STATUS[j.state] || "خطأ"; }
-async function cancelRun() { $("#cancel").disabled = true; await postJSON("/api/jobs/" + RUN.job_id + "/cancel"); setTimeout(() => { $("#cancel").disabled = false; }, 1500); }
+
+async function onDone(j) {
+  if ($("#progress")) $("#progress").hidden = true;
+  setStatus("✓ تم التوزيع بنجاح", "ok");
+  if (!shown) await loadResult();
+  renderDl("ready", j.result_elapsed);
+  toast("تم الانتهاء من التوزيع بنجاح ✓", "ok");
+}
+
+async function onErr(j) {
+  if ($("#progress")) $("#progress").hidden = true;
+  if ($("#errbox")) $("#errbox").hidden = false;
+  if ($("#errtxt")) $("#errtxt").textContent = j.state === "cancelled" ? "تم إلغاء التشغيل." : "خطأ: " + (j.error || "");
+  setStatus(STATUS[j.state] || "خطأ", "bad");
+}
+
+async function cancelRun() {
+  if ($("#cancel")) $("#cancel").disabled = true;
+  await postJSON("/api/jobs/" + RUN.job_id + "/cancel");
+  setTimeout(() => { if ($("#cancel")) $("#cancel").disabled = false; }, 1500);
+}
 
 function renderDl(files, relapsed) {
   const d = $("#dl");
-  if (files === "ready") d.innerHTML = `<a class="btn ok" href="/api/runs/${RUN.id}/file/xlsx">تحميل النتائج (Excel)</a><a class="btn" href="/api/runs/${RUN.id}/file/qgis">طبقات QGIS</a>` +
-    `<a class="btn sec" href="/api/runs/${RUN.id}/file/per_center">قوايم لكل مركز (Excel)</a><a class="btn sec" href="/review?run=${RUN.id}">مراجعة المواقع</a>`;
-  else if (files === "writing") d.innerHTML = `<span class="hint">⏳ جاري تجهيز ملفات التحميل... النتيجة تحت جاهزة${relapsed ? " (ظهرت بعد " + fmtSec(relapsed) + ")" : ""}.</span>`;
-  else if (files === "cancelled" || files === "error") d.innerHTML = `<span class="hint bad">ما اتجهزتش ملفات التحميل (${files === "cancelled" ? "اتلغى" : "خطأ"}).</span>`;
+  if (!d) return;
+  if (files === "ready") {
+    d.innerHTML = `
+      <a class="dl-card" href="/api/runs/${RUN.id}/file/xlsx">
+        <div class="dl-icon" style="background:var(--ok-bg);color:var(--ok)">📊</div>
+        <div>
+          <div class="dl-title">ملف Excel الشامل (11 شيت)</div>
+          <div class="dl-desc">نتائج التوزيع، المسافات، الـVP، عجز السعة</div>
+        </div>
+      </a>
+      <a class="dl-card" href="/api/runs/${RUN.id}/file/qgis">
+        <div class="dl-icon" style="background:var(--brand-light);color:var(--brand)">🗺️</div>
+        <div>
+          <div class="dl-title">طبقات QGIS المكانية (ZIP)</div>
+          <div class="dl-desc">نقاط الطلاب والمراكز لبرامج التحليل الجغرافي</div>
+        </div>
+      </a>
+      <a class="dl-card" href="/api/runs/${RUN.id}/file/per_center">
+        <div class="dl-icon" style="background:var(--soft);color:var(--ink)">📑</div>
+        <div>
+          <div class="dl-title">كشوفات المراكز للمنسقين (Excel)</div>
+          <div class="dl-desc">صفحة مستقلة لكل مركز لتسليمها لإدارة القاعات</div>
+        </div>
+      </a>
+      <a class="dl-card" href="/review?run=${RUN.id}">
+        <div class="dl-icon" style="background:var(--warn-bg);color:var(--warn)">🎯</div>
+        <div>
+          <div class="dl-title">مراجعة وتعديل المواقع</div>
+          <div class="dl-desc">تصحيح مواقع مجموعات الطلاب تقريبية العناوين</div>
+        </div>
+      </a>
+    `;
+  } else if (files === "writing") {
+    d.innerHTML = `<div class="issue info"><span>⏳</span> <span>جاري تجهيز وتوليد ملفات التحميل... (النتائج بالأدنى جاهزة${relapsed ? " بعد " + fmtSec(relapsed) : ""})</span></div>`;
+  } else if (files === "cancelled" || files === "error") {
+    d.innerHTML = `<div class="issue error"><span>✗</span> <span>لم يتم تجهيز ملفات التحميل (${files === "cancelled" ? "تم الإلغاء" : "حدث خطأ"}).</span></div>`;
+  }
 }
 
 async function loadResult() {
@@ -44,10 +121,30 @@ async function loadResult() {
 }
 
 function render(r) {
-  const s = r.summary, k = (v, l, c) => `<div class="kpi"><b class="${c || ""}">${v}</b><span>${l}</span></div>`;
-  $("#alerts").innerHTML = (s.alerts || []).map(a => '<div class="alert">⚠ ' + esc(a) + "</div>").join("");
-  $("#kpis").innerHTML = k(n(s.students), "إجمالي الطلاب") + k(n(s.assigned), "تم توزيعهم", "ok") + k(n(s.vp), "مقترح VP", "bad") +
-    k(n(s.same_area), "في نفس منطقتهم") + k(s.avg_km + " كم", "متوسط المسافة") + k(n(s.centers) + " / " + n(s.groups), "مراكز / جروبات") + k(n(s.seats), "إجمالي المقاعد");
+  const s = r.summary;
+  const pill = $("#pstat_pill");
+  if (pill) {
+    pill.className = "pill ok";
+    pill.textContent = "✓ تم التوزيع بنجاح";
+  }
+
+  const k = (v, l, cls, prefix = "") => `
+    <div class="kpi ${prefix}">
+      <b class="${cls || ""}">${v}</b>
+      <span>${l}</span>
+    </div>`;
+
+  const assignedRatio = s.students > 0 ? Math.round((s.assigned / s.students) * 100) : 0;
+
+  $("#alerts").innerHTML = (s.alerts || []).map(a => `<div class="issue warn"><span>⚠️</span> <span>${esc(a)}</span></div>`).join("");
+  $("#kpis").innerHTML = 
+    k(`${n(s.assigned)} <small style="font-size:15px;color:var(--ok)">(${assignedRatio}%)</small>`, "الطلاب المسكنين بنجاح", "ok", "kpi-ok") +
+    k(n(s.students), "إجمالي عدد الطلاب", "", "kpi-brand") +
+    k(n(s.vp), "قيد الانتظار (VP)", "bad", "kpi-bad") +
+    k(n(s.same_area), "في نفس منطقتهم السكنية", "", "kpi-ok") +
+    k((s.avg_km || "0") + " كم", "متوسط مسافة الطريق", "brand", "kpi-brand") +
+    k(`${n(s.centers)} مركز / ${n(s.groups)} جروب`, "المراكز والقاعات المستغلة", "", "") +
+    k(n(s.seats), "إجمالي المقاعد المتاحة", "", "");
   $("#warn").innerHTML = (s.warnings || []).length ? '<ul class="warn">' + s.warnings.map(w => "<li>" + esc(w) + "</li>").join("") + "</ul>" : "";
   $("#dtype").textContent = "نوع المسافة: " + s.distance_label + ((s.road_cache_hits || s.road_computed) ? ` — من الكاش ${n(s.road_cache_hits || 0)} موقع، واتحسب ${n(s.road_computed || 0)}` : "");
   const g = s.geo || {}, gs = g.students || {}, lv = gs.by_level || {}, srcs = gs.by_source || {}, tot = gs.total || 1, pc = x => Math.round(100 * (lv[x] || 0) / tot);

@@ -1,65 +1,225 @@
-{% extends "base.html" %}{% block title %}{{ run.name or run.id }}{% endblock %}
+{% extends "base.html" %}
+{% block title %}{{ run.name or run.id }}{% endblock %}
+
 {% block body %}
-<h1 id="title">{{ run.name or run.students_file }} <small class="mute" style="font-size:13px;font-weight:400">{{ run.created_at }}</small></h1>
-<p class="sub">{{ run.students_file }} + {{ run.centers_file }} · <span id="pstat"></span></p>
-
-<div class="card" id="progress" hidden>
-  <div class="row"><b id="pmsg">...</b><span id="ptime" class="mute"></span><button class="del sm" id="cancel" onclick="cancelRun()">إلغاء</button></div>
-  <div class="bar"><div id="pbar"></div></div>
-  <div class="hint">النتيجة بتظهر أول ما تتحسب، وملفات Excel وQGIS بتتجهز بعدها.</div>
-</div>
-<div class="card" id="errbox" hidden><div class="alert" id="errtxt"></div></div>
-
-<div id="out" hidden>
-  <div class="tabs"><button class="on" data-tab="sum" onclick="tab('sum')">الملخص</button><button data-tab="map" onclick="tab('map')">الخريطة</button>
-    <button data-tab="whatif" onclick="tab('whatif')">ماذا لو؟</button></div>
-
-  <div id="tab-sum">
-    <div class="card"><h2>الملخص</h2><div id="alerts"></div><div class="kpis" id="kpis"></div><div id="warn"></div>
-      <div class="hint" id="dtype"></div><div class="hint" id="geo"></div>
-      <div class="row" style="margin-top:14px" id="dl"></div>
-      <div class="row" style="margin-top:10px"><label style="margin:0">مقارنة مع تشغيل تاني:</label><select id="cmp" class="inline" style="min-width:260px"></select><button class="sec sm" onclick="goCompare()">قارن</button></div></div>
-    <div class="card"><h2>أسباب الـVP</h2><div class="scroll"><table id="t_reason"></table></div></div>
-    <div class="card" id="susbox" hidden><h2 class="warn">إحداثيات مشبوهة (للمراجعة)</h2>
-      <div id="sus_c_wrap"><b>مراكز</b><div class="scroll"><table id="t_susc"></table></div></div>
-      <div id="sus_s_wrap" style="margin-top:12px"><b id="sus_s_title">طلاب</b><div class="scroll"><table id="t_suss"></table></div></div></div>
-    <div class="card"><h2>العجز في السعة (محافظة × ليفيل/تراك)</h2>
-      <div class="hint" style="margin:0 0 8px">العجز = طلاب − مقاعد المحافظة. الجروبات الإضافية محسوبة بسعة الجروب المعتادة لنفس الليفيل. جرّب إضافة جروب من تبويب «ماذا لو؟».</div>
-      <div class="scroll"><table id="t_def"></table></div></div>
-    <div class="grid2">
-      <div class="card"><h2>حسب المحافظة</h2><div class="scroll"><table id="t_gov"></table></div></div>
-      <div class="card"><h2>حسب الليفيل/التراك</h2><div class="scroll"><table id="t_lvl"></table></div></div>
+<div class="page-header">
+  <div class="page-title-area">
+    <div class="row" style="gap:10px;margin-bottom:6px">
+      <h1 id="title" style="margin:0">{{ run.name or run.students_file }}</h1>
+      <span class="pill" id="pstat_pill">جاري التحميل...</span>
     </div>
-    <div class="card"><h2>إشغال المراكز</h2><div class="scroll"><table id="t_cen"></table></div></div>
+    <p class="sub">
+      ملف الطلاب: <b style="color:var(--ink)">{{ run.students_file }}</b> · ملف المراكز: <b style="color:var(--ink)">{{ run.centers_file }}</b> · <span class="mute">تاريخ الإنشاء: {{ run.created_at }}</span>
+    </p>
+  </div>
+  <div id="quick_actions_top" class="row"></div>
+</div>
+
+<!-- Live Multi-stage Progress Card -->
+<div class="card fade-in" id="progress" hidden style="background:var(--card);border:2px solid var(--brand);padding:24px">
+  <div class="row" style="justify-content:space-between;margin-bottom:12px">
+    <div class="row" style="gap:10px">
+      <div class="dropzone-icon" style="width:40px;height:40px;margin:0;font-size:20px">⚙️</div>
+      <div>
+        <b id="pmsg" style="font-size:16px">جاري بدء معالجة التوزيع...</b>
+        <div class="small mute" id="ptime">⏱ جاري الحساب...</div>
+      </div>
+    </div>
+    <button class="btn del sm" id="cancel" onclick="cancelRun()">إلغاء العملية</button>
+  </div>
+  
+  <div class="bar" style="height:14px">
+    <div id="pbar" style="width:5%"></div>
   </div>
 
+  <div class="row" style="justify-content:space-between;margin-top:12px">
+    <span class="small mute">المحرك يقوم بفرز الطلاب حسب المحافظة وحساب مسافات OSRM وتسكين القاعات...</span>
+    <span class="small ok" id="p_subnote">⚡ المحرك يعمل بأقصى سرعة</span>
+  </div>
+</div>
+
+<!-- Error Alert -->
+<div class="card" id="errbox" hidden style="border-color:var(--bad-border);background:var(--bad-bg)">
+  <div class="alert" id="errtxt" style="margin:0"></div>
+</div>
+
+<!-- Main Results Container -->
+<div id="out" hidden class="fade-in">
+  <!-- Tabs Navigation -->
+  <div class="tabs">
+    <button class="on" data-tab="sum" onclick="tab('sum')">📊 لوحة المؤشرات والتحليلات</button>
+    <button data-tab="map" onclick="tab('map')">🗺️ الخريطة التفاعلية والطلاب</button>
+    <button data-tab="whatif" onclick="tab('whatif')">💡 محاكي إضافة قاعات (ماذا لو؟)</button>
+  </div>
+
+  <!-- TAB 1: Summary & Analytics -->
+  <div id="tab-sum">
+    <!-- Top Highlights & Alerts -->
+    <div id="alerts"></div>
+
+    <!-- Main KPI Cards -->
+    <div class="kpis" id="kpis"></div>
+
+    <!-- Download Hub Cards -->
+    <div class="card" style="padding:20px;margin-bottom:20px">
+      <div class="card-header-clean">
+        <h2><span>📥</span> مركز تحميل النتائج والتقارير الرسمية</h2>
+        <span class="pill ok">الملفات جاهزة للتحميل الفوري</span>
+      </div>
+      <div class="download-hub" id="dl"></div>
+    </div>
+
+    <!-- Geo & Road Engine Info -->
+    <div class="card" style="padding:16px 20px;background:var(--soft);margin-bottom:20px">
+      <div class="row" style="justify-content:space-between">
+        <div style="flex:1">
+          <div style="font-weight:700;margin-bottom:4px" id="dtype">نوع المسافة المستخدمة: --</div>
+          <div class="small mute" id="geo">مواقع الطلاب: --</div>
+        </div>
+        <div class="row" style="gap:8px">
+          <label style="margin:0;font-weight:600">مقارنة مع تشغيل آخر:</label>
+          <select id="cmp" class="inline" style="min-width:220px"></select>
+          <button class="btn sec sm" onclick="goCompare()">قارن الآن</button>
+        </div>
+      </div>
+      <div id="warn" style="margin-top:10px"></div>
+    </div>
+
+    <!-- VP Reasons & Capacity Deficit -->
+    <div class="grid2" style="margin-bottom:20px">
+      <div class="card" style="margin:0">
+        <div class="card-header-clean">
+          <h3><span>⏳</span> أسباب وضع الطلاب في قائمة الانتظار (VP)</h3>
+        </div>
+        <div class="scroll"><table id="t_reason"></table></div>
+      </div>
+
+      <div class="card" style="margin:0">
+        <div class="card-header-clean">
+          <h3><span>📉</span> تحليل العجز في المقاعد (محافظة × ليفيل)</h3>
+        </div>
+        <div class="hint" style="margin:0 0 8px">
+          العجز = عدد الطلاب المطلوبين − سعة مقاعد المحافظة. يمكن معالجته عبر تبويب «ماذا لو؟».
+        </div>
+        <div class="scroll"><table id="t_def"></table></div>
+      </div>
+    </div>
+
+    <!-- Breakdown by Gov & Level -->
+    <div class="grid2" style="margin-bottom:20px">
+      <div class="card" style="margin:0">
+        <div class="card-header-clean">
+          <h3><span>📍</span> التوزيع الجغرافي حسب المحافظة</h3>
+        </div>
+        <div class="scroll"><table id="t_gov"></table></div>
+      </div>
+
+      <div class="card" style="margin:0">
+        <div class="card-header-clean">
+          <h3><span>📚</span> التوزيع الأكاديمي حسب الليفيل والتراك</h3>
+        </div>
+        <div class="scroll"><table id="t_lvl"></table></div>
+      </div>
+    </div>
+
+    <!-- Centers Occupancy Load -->
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-header-clean">
+        <h3><span>🏢</span> معدل إشغال المراكز والقاعات</h3>
+      </div>
+      <div class="scroll"><table id="t_cen"></table></div>
+    </div>
+
+    <!-- Suspect Coordinates Box -->
+    <div class="card" id="susbox" hidden style="border-color:var(--warn-border)">
+      <div class="card-header-clean">
+        <h3 class="warn"><span>⚠️</span> إحداثيات مشتبه في دقتها (للمراجعة الجغرافية)</h3>
+      </div>
+      <div id="sus_c_wrap" style="margin-bottom:14px">
+        <b>مراكز تحتاج تدقيق موقعها:</b>
+        <div class="scroll" style="margin-top:6px"><table id="t_susc"></table></div>
+      </div>
+      <div id="sus_s_wrap">
+        <b id="sus_s_title">طلاب ذوو إحداثيات تقريبية:</b>
+        <div class="scroll" style="margin-top:6px"><table id="t_suss"></table></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 2: Interactive Leaflet Map -->
   <div id="tab-map" hidden>
     <div class="card">
-      <div class="row">
-        <select id="m_gov" class="inline" onchange="mapGov()"><option value="">كل المحافظات</option></select>
-        <label style="margin:0"><input type="checkbox" id="m_vp" onchange="mapVP()"> عرض طلاب الـVP في المحافظة المختارة</label>
-        <span class="hint" id="m_msg" style="margin:0"></span>
+      <div class="row" style="justify-content:space-between;margin-bottom:14px">
+        <div class="row" style="gap:14px">
+          <div>
+            <label style="margin:0 0 4px;font-size:12px">تصفية حسب المحافظة:</label>
+            <select id="m_gov" class="inline" onchange="mapGov()" style="min-width:180px">
+              <option value="">جميع المحافظات</option>
+            </select>
+          </div>
+          <div style="display:flex;align-items:center;margin-top:16px">
+            <label style="margin:0;cursor:pointer;display:flex;align-items:center;gap:6px">
+              <input type="checkbox" id="m_vp" onchange="mapVP()"> عرض طلاب الـVP في المحافظة المختارة
+            </label>
+          </div>
+        </div>
+        <span class="pill brand" id="m_msg">اختر مركزاً لعرض طلابه</span>
       </div>
-      <div class="legend"><span><i style="background:#16794c"></i>مركز إشغاله أقل من 80%</span><span><i style="background:#e08a1e"></i>80–99%</span><span><i style="background:#b42318"></i>ممتلئ</span><span><i style="background:#16794c;width:8px;height:8px"></i>طالب موزع</span><span><i style="background:#d92d20;width:8px;height:8px"></i>طالب VP</span></div>
+
+      <div class="legend" style="margin-bottom:12px;background:var(--soft);padding:8px 14px;border-radius:var(--radius-md)">
+        <span><i style="background:#10b981"></i>مركز شاغر (إشغال &lt; 80%)</span>
+        <span><i style="background:#f59e0b"></i>شبه ممتلئ (80–99%)</span>
+        <span><i style="background:#f43f5e"></i>ممتلئ بالكامل (100%)</span>
+        <span><i style="background:#10b981;width:8px;height:8px"></i>طالب مسكن</span>
+        <span><i style="background:#f43f5e;width:8px;height:8px"></i>طالب قيد الانتظار (VP)</span>
+      </div>
+
       <div id="map" class="map"></div>
-      <div class="hint">اضغط على مركز عشان تشوف طلابه (الموزعين عليه + الـVP اللي هو أقرب مركز ليهم).</div>
+      <div class="hint" style="margin-top:8px">
+        💡 انقر على أي مركز على الخريطة لرؤية نطاق طلابه الموزعين عليه وأقرب طلاب الـ VP له مع مسافاتهم الفعلية.
+      </div>
     </div>
   </div>
 
+  <!-- TAB 3: What-if Capacity Simulator -->
   <div id="tab-whatif" hidden>
-    <div class="card"><h2>ماذا لو ضفنا جروب؟</h2>
-      <div class="hint" style="margin:0 0 10px">تقدير سريع: الطلاب الـVP من نفس الليفيل في محافظة المركز، الأقرب فالأقرب، في حدود أقصى مسافة. (من غير إعادة توزيع كاملة.)</div>
-      <div class="grid3">
-        <div><label>المركز</label><select id="w_center"></select></div>
-        <div><label>الليفيل/التراك</label><select id="w_level"></select></div>
-        <div><label>سعة الجروب × عدد الجروبات</label><div class="row"><input type="number" id="w_cap" class="inline" value="25" min="1" style="width:90px"> × <input type="number" id="w_n" class="inline" value="1" min="1" style="width:70px"><button onclick="whatIf()">احسب</button></div></div>
+    <div class="card">
+      <div class="card-header-clean">
+        <h2><span>💡</span> محاكي السعة: ماذا لو أضفنا جروبات إضافية؟</h2>
       </div>
-      <div id="w_out" style="margin-top:12px"></div>
+      <p class="sub" style="margin-top:0">
+        أداة تقدير سريعة لإنقاذ طلاب الـ VP: تختار مركزاً وليفيلاً وسعة، فيقوم المحاكي بحساب عدد طلاب الـ VP الأقرب جغرافياً الذين سيتم تسكينهم دون الحاجة لإعادة التوزيع الشاملة.
+      </p>
+
+      <div class="grid3" style="background:var(--soft);padding:18px;border-radius:var(--radius-lg);margin-bottom:18px">
+        <div>
+          <label for="w_center">اختر المركز المراد دعمه:</label>
+          <select id="w_center"></select>
+        </div>
+        <div>
+          <label for="w_level">اختر الليفيل والتراك المطلوب:</label>
+          <select id="w_level"></select>
+        </div>
+        <div>
+          <label>سعة القاعة × عدد الجروبات الجديدة:</label>
+          <div class="row">
+            <input type="number" id="w_cap" class="inline" value="25" min="1" style="width:90px" title="سعة الجروب الواحد">
+            <span>×</span>
+            <input type="number" id="w_n" class="inline" value="1" min="1" style="width:70px" title="عدد الجروبات">
+            <button type="button" class="btn gradient" onclick="whatIf()">محاكاة التسكين</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="w_out"></div>
     </div>
   </div>
 </div>
 {% endblock %}
+
 {% block scripts %}
-<script>const RUN = {{ run|tojson }};</script>
+<script>
+  const RUN = {{ run|tojson }};
+</script>
 <script src="{{ url_for('static', filename='js/run.js') }}"></script>
 {% endblock %}

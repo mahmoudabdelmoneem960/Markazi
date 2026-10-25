@@ -1,32 +1,73 @@
-{% extends "base.html" %}{% block title %}المراكز{% endblock %}
+{% extends "base.html" %}
+{% block title %}إدارة مواقع المراكز{% endblock %}
+
 {% block body %}
-<h1>المراكز</h1>
-<p class="sub">قاعدة بيانات مواقع المراكز. أي تصحيح بيتحفظ وبيتطبق في كل توزيع جاي، وبيتغلب على الشيت.</p>
-<div class="kpis" id="kpis"></div>
-<div class="card" style="margin-top:14px">
-  <div class="row">
-    <label style="margin:0">استيراد شيت مراكز: <input type="file" id="imp" class="inline" accept=".xlsx,.xls,.csv"></label>
-    <button class="sec sm" onclick="doImport()">استيراد</button>
-    <button class="sec sm" id="vbtn" onclick="verifyLinks()">تحقق من لينكات Google (بطيء)</button>
-    <button class="sec sm" id="gbtn" onclick="googleVerify()">تحقق بـ Google API</button>
-    <select id="gscope" class="inline"><option value="unverified">غير المتأكد منها</option><option value="all">كل المراكز</option></select>
-    <button class="del sm" id="gcancel" onclick="googleCancel()" hidden>إلغاء فحص جوجل</button>
-    <a class="btn sec sm" href="/api/centers.csv">تصدير CSV (لـ QGIS)</a>
+<div class="page-header">
+  <div class="page-title-area">
+    <h1>قاعدة مواقع المراكز والقاعات</h1>
+    <p class="sub">المستودع الجغرافي الموحد لإحداثيات المراكز. أي تصحيح يدوي يُحفظ دائماً ويُعتمد في كافة التوزيعات المستقبلية.</p>
   </div>
-  <div class="hint" id="cmsg"></div><div class="hint" id="gmsg"></div><div class="hint" id="gres"></div>
+  <div class="header-actions">
+    <a class="btn sec" href="/api/centers.csv">
+      <span>📥</span> <span>تصدير CSV (لـ QGIS)</span>
+    </a>
+  </div>
 </div>
-<div class="split">
-  <div class="card">
-    <div class="row"><input type="text" id="cq" class="inline" placeholder="بحث (كود/اسم/محافظة/منطقة)" oninput="draw()" style="min-width:240px">
-      <label style="margin:0"><input type="checkbox" id="cflag" onchange="draw()"> اللي فيهم تحذيرات بس</label></div>
-    <div class="scroll tall"><table id="ct"></table></div>
-    <p class="hint">اضغط على صف عشان الخريطة تروح للمركز. لتعديل الموقع: اسحب الدبوس على الخريطة، أو الصق إحداثيات/لينك Google في خانة التعديل.</p>
+
+<div class="kpis" id="kpis"></div>
+
+<!-- Actions Toolbar Card -->
+<div class="card" style="margin-top:16px;padding:16px 20px">
+  <div class="row" style="justify-content:space-between">
+    <div class="row" style="gap:10px">
+      <label style="margin:0;font-weight:600">استيراد شيت مراكز:</label>
+      <input type="file" id="imp" class="inline" accept=".xlsx,.xls,.csv" style="padding:6px 10px">
+      <button class="btn sec sm" onclick="doImport()">استيراد</button>
+    </div>
+    <div class="row" style="gap:8px">
+      <button class="btn sec sm" id="vbtn" onclick="verifyLinks()">فحص روابط Google</button>
+      <button class="btn sec sm" id="gbtn" onclick="googleVerify()">تحقق بـ Google API</button>
+      <select id="gscope" class="inline" style="padding:6px 10px">
+        <option value="unverified">غير المتأكد منها فقط</option>
+        <option value="all">جميع المراكز</option>
+      </select>
+      <button class="btn del sm" id="gcancel" onclick="googleCancel()" hidden>إلغاء فحص جوجل</button>
+    </div>
   </div>
-  <div class="card">
+  <div class="hint" id="cmsg"></div>
+  <div class="hint" id="gmsg"></div>
+  <div class="hint" id="gres"></div>
+</div>
+
+<!-- Split View: Table & Map -->
+<div class="split" style="margin-top:20px">
+  <div class="card" style="margin:0">
+    <div class="card-header-clean">
+      <div class="row" style="gap:12px;width:100%">
+        <input type="text" id="cq" class="inline" placeholder="🔍 بحث (كود، اسم، محافظة، منطقة)..." oninput="draw()" style="flex:1">
+        <label style="margin:0;cursor:pointer;display:flex;align-items:center;gap:6px">
+          <input type="checkbox" id="cflag" onchange="draw()"> التي بها تحذيرات فقط
+        </label>
+      </div>
+    </div>
+    <div class="scroll tall"><table id="ct"></table></div>
+    <p class="hint" style="margin-top:12px">
+      💡 انقر على أي صف لتوجيه الخريطة لموقع المركز. لتعديل الموقع: اسحب الدبوس على الخريطة أو الصق الإحداثيات/رابط خرائط جوجل.
+    </p>
+  </div>
+
+  <div class="card" style="margin:0">
     <div id="map" class="map"></div>
-    <div id="sel" class="hint"></div>
-    <div class="row" style="margin-top:8px"><input type="text" id="ci" class="inline" placeholder="lat, lon أو لينك Google" style="min-width:260px"><button class="sm" id="csave" onclick="saveSel()" disabled>حفظ للمركز المختار</button><span class="msg" id="cm"></span></div>
+    <div id="sel" class="hint" style="margin-top:10px;font-weight:600"></div>
+    <div class="row" style="margin-top:10px;gap:8px">
+      <input type="text" id="ci" class="inline" placeholder="الصق lat, lon أو رابط خرائط جوجل" style="flex:1">
+      <button class="btn sm gradient" id="csave" onclick="saveSel()" disabled>حفظ للمركز المختار</button>
+      <span class="msg" id="cm"></span>
+    </div>
   </div>
 </div>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='js/centers.js') }}"></script>{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/centers.js') }}"></script>
+{% endblock %}

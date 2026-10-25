@@ -91,6 +91,23 @@ def runs_upload():
     return jsonify(rep)
 
 
+@bp.route("/runs/sample", methods=["POST"])
+def runs_sample():
+    """تحميل عينة جاهزة بضغطة زر للتجربة السريعة."""
+    sample_dir = config.BASE_DIR / "sample"
+    s_path = sample_dir / "students_sample.xlsx"
+    c_path = sample_dir / "centers_sample.csv"
+    if not s_path.exists() or not c_path.exists():
+        return jsonify(error="ملفات العينة غير موجودة في مجلد sample"), 404
+    try:
+        token = runs.save_draft(s_path.name, s_path.read_bytes(), c_path.name, c_path.read_bytes())
+        rep = runs.draft_preflight(token)
+        rep["is_sample"] = True
+    except Exception as e:  # noqa
+        return jsonify(error=f"تعذر تجهيز ملفات العينة: {e}"), 400
+    return jsonify(rep)
+
+
 @bp.route("/runs", methods=["POST"])
 def runs_create():
     """الخطوة 2: بدء التوزيع على المسودة."""

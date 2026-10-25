@@ -1,14 +1,36 @@
-{% extends "base.html" %}{% block title %}إنشاء الأدمن{% endblock %}
+{% extends "base.html" %}
+{% block title %}إنشاء حساب المسؤول (الأدمن) · Markazi{% endblock %}
+
 {% block body %}
-<div class="card login">
-  <h1>أول تشغيل: إنشاء حساب الأدمن</h1>
-  <p class="sub">الحساب ده هو اللي هيدخل السيستم. كلمة السر بتتحفظ مشفّرة على جهازك.</p>
-  {% if error %}<div class="alert">{{ error }}</div>{% endif %}
+<div class="card login fade-in" style="max-width:460px;margin:50px auto;padding:32px;box-shadow:var(--shadow-xl);border-radius:var(--radius-lg)">
+  <div style="text-align:center;margin-bottom:24px">
+    <div class="brand-logo" style="width:48px;height:48px;font-size:24px;margin:0 auto 12px">M</div>
+    <h1 style="font-size:22px;margin:0 0 6px">إعداد حساب المسؤول الأول</h1>
+    <p class="sub" style="margin:0">الحساب الرئيسي لإدارة التوزيعات. كلمة المرور تُحفظ مشفرة بأمان محلياً.</p>
+  </div>
+
+  {% if error %}
+  <div class="issue error" style="margin-bottom:16px">
+    <span>❌</span> <span>{{ error }}</span>
+  </div>
+  {% endif %}
+
   <form method="post">
-    <label>اسم المستخدم</label><input type="text" name="username" value="admin" required>
-    <label style="margin-top:10px">كلمة السر (8 حروف على الأقل)</label><input type="password" name="password" required minlength="8">
-    <label style="margin-top:10px">تأكيد كلمة السر</label><input type="password" name="password2" required minlength="8">
-    <div style="margin-top:14px"><button type="submit">إنشاء ودخول</button></div>
+    <div style="margin-bottom:14px">
+      <label for="username">اسم المستخدم:</label>
+      <input type="text" id="username" name="username" value="admin" required>
+    </div>
+    <div style="margin-bottom:14px">
+      <label for="password">كلمة المرور (8 خانات على الأقل):</label>
+      <input type="password" id="password" name="password" required minlength="8" placeholder="••••••••">
+    </div>
+    <div style="margin-bottom:20px">
+      <label for="password2">تأكيد كلمة المرور:</label>
+      <input type="password" id="password2" name="password2" required minlength="8" placeholder="••••••••">
+    </div>
+    <button type="submit" class="btn lg gradient" style="width:100%">
+      <span>إنشاء الحساب ودخول النظام</span> <span>←</span>
+    </button>
   </form>
 </div>
 {% endblock %}
