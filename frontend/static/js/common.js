@@ -11,6 +11,33 @@ const GOV_AR = {alexandria: "الإسكندرية", cairo: "القاهرة", giz
   new_valley: "الوادي الجديد", north_sinai: "شمال سيناء", assiut: "أسيوط", luxor: "الأقصر", aswan: "أسوان", qena: "قنا", red_sea: "البحر الأحمر", matrouh: "مطروح"};
 const govAr = g => GOV_AR[g] || g || "";
 
+// تصنيف الـ 27 محافظة إلى بنود (البند الأول / البند الثاني / البند الثالث)
+const GOV_BANDS = {
+  // البند الأول (9 محافظات)
+  cairo: "البند الأول", suez: "البند الأول", ismailia: "البند الأول", port_said: "البند الأول",
+  beheira: "البند الأول", beni_suef: "البند الأول", minya: "البند الأول", south_sinai: "البند الأول", north_sinai: "البند الأول",
+
+  // البند الثاني (9 محافظات) - مشكلة في البيانات (غير مستهدفة حالياً)
+  giza: "البند الثاني", qalyubia: "البند الثاني", monufia: "البند الثاني", qena: "البند الثاني",
+  aswan: "البند الثاني", assiut: "البند الثاني", luxor: "البند الثاني", red_sea: "البند الثاني", matrouh: "البند الثاني",
+
+  // البند الثالث (9 محافظات)
+  alexandria: "البند الثالث", sharqia: "البند الثالث", dakahlia: "البند الثالث", gharbia: "البند الثالث",
+  damietta: "البند الثالث", kafr_el_sheikh: "البند الثالث", fayoum: "البند الثالث", sohag: "البند الثالث", new_valley: "البند الثالث"
+};
+
+function getGovBand(g) {
+  if (!g) return "غير محدد";
+  const s = String(g).trim().toLowerCase();
+  if (GOV_BANDS[s]) return GOV_BANDS[s];
+  const clean = s.replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي");
+  for (const [code, ar] of Object.entries(GOV_AR)) {
+    const arClean = ar.replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي").toLowerCase();
+    if (arClean === clean || code === s) return GOV_BANDS[code] || "غير محدد";
+  }
+  return "غير محدد";
+}
+
 async function api(url, opts = {}) {
   let r;
   try { r = await fetch(url, opts); } catch (e) { return {ok: false, status: 0, j: {error: "تعذر الاتصال بالسيستم"}}; }

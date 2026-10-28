@@ -194,6 +194,8 @@ def execute(job, run_id):
                       ("مراكز إحداثياتها مشبوهة", r["sus_centers"]), ("طلاب إحداثياتهم مشبوهة", r["sus_students"]),
                       ("ملخص المحافظات", r["by_gov"]), ("ملخص الليفيل", r["by_level"]),
                       ("إشغال المراكز", r["center_load"]), ("إشغال الجروبات", r["load"])]
+        if "band" in st.columns and (st["band"] == engine.BAND_2).any():
+            sheet_list.insert(2, ("طلاب البند الثاني (للتعديل)", st[st["band"] == engine.BAND_2]))
         done = [0]
 
         def say(m):
@@ -538,6 +540,40 @@ def get_invalid_nids(run_id, page=1, per_page=50, search=""):
         r["_nid_len"] = len(str(r.get(nid_col, "")).strip())
     cols = ["row_no", nid_col, "_nid_len", "gov", "Area", "Adress", "Level(25-26)", "status", "center_code", "distance_km"]
     present_cols = [c for c in cols if c in sub.columns or c == "_nid_len"]
+    return {"total": total, "page": page, "per_page": per_page, "rows": page_rows, "cols": present_cols}
+
+
+def get_band2_students(run_id, page=1, per_page=50, search=""):
+    """جلب قائمة الطلاب التابعين للبند الثاني (المطلوب مراجعتهم أو تعديلهم من الشيت الأصلي)."""
+    st = load_students(run_id)
+    if st is None:
+        raise ValueError("ملف الطلاب غير موجود")
+    band_col = "band" if "band" in st.columns else "البند"
+    if band_col in st.columns:
+        b2_mask = st[band_col] == engine.BAND_2
+    elif "gov" in st.columns:
+        b2_mask = st["gov"].map(engine.get_gov_band) == engine.BAND_2
+    else:
+        return {"total": 0, "page": 1, "per_page": per_page, "rows": [], "cols": []}
+
+    sub = st[b2_mask].copy()
+    nid_col = next((c for c in st.columns if c.strip().lower() in ("student nid", "nid")), "Student NID")
+    if search:
+        search_str = search.strip().lower()
+        mask = sub["row_no"].astype(str).str.contains(search_str, case=False, na=False)
+        if nid_col in sub.columns:
+            mask |= sub[nid_col].astype(str).str.contains(search_str, case=False, na=False)
+        if "gov" in sub.columns:
+            mask |= sub["gov"].astype(str).str.contains(search_str, case=False, na=False)
+        if "Area" in sub.columns:
+            mask |= sub["Area"].astype(str).str.contains(search_str, case=False, na=False)
+        sub = sub[mask]
+    total = len(sub)
+    start = max(0, (page - 1) * per_page)
+    end = start + per_page
+    page_rows = sub.iloc[start:end].to_dict("records")
+    cols = ["row_no", nid_col, "gov", "البند", "Area", "Adress", "Level(25-26)", "level_code", "status", "center_code", "distance_km", "note"]
+    present_cols = [c for c in cols if c in sub.columns]
     return {"total": total, "page": page, "per_page": per_page, "rows": page_rows, "cols": present_cols}
 
 

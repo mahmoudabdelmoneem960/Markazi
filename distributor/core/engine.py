@@ -39,14 +39,76 @@ OSRM_WORKERS = int(os.environ.get("OSRM_WORKERS", "8"))
 
 # اسم المحافظة عند الطالب (بعد التطبيع) -> كود City في شيت المراكز
 GOV_MAP = {
-    "الاسكندريه": "alexandria", "البحيره": "beheira", "بني سويف": "beni_suef", "القاهره": "cairo",
-    "الدقهليه": "dakahlia", "دمياط": "damietta", "الفيوم": "fayoum", "الغربيه": "gharbia",
+    "الاسكندريه": "alexandria", "البحيره": "beheira", "بني سويف": "beni_suef", "بنى سويف": "beni_suef",
+    "القاهره": "cairo", "الدقهليه": "dakahlia", "دمياط": "damietta", "الفيوم": "fayoum", "الغربيه": "gharbia",
     "الاسماعيليه": "ismailia", "كفر الشيخ": "kafr_el_sheikh", "المنيا": "minya",
-    "الوادي الجديد": "new_valley", "بورسعيد": "port_said", "الشرقيه": "sharqia", "سوهاج": "sohag",
-    "جنوب سيناء": "south_sinai", "السويس": "suez", "الجيزه": "giza", "القليوبيه": "qalyubia",
-    "المنوفيه": "monufia", "اسيوط": "assiut", "اسوان": "aswan", "الاقصر": "luxor", "قنا": "qena",
-    "البحر الاحمر": "red_sea", "مطروح": "matrouh", "شمال سيناء": "north_sinai",
+    "الوادي الجديد": "new_valley", "الوادى الجديد": "new_valley", "بورسعيد": "port_said", "الشرقيه": "sharqia",
+    "سوهاج": "sohag", "جنوب سيناء": "south_sinai", "جنوب سينا": "south_sinai", "السويس": "suez",
+    "الجيزه": "giza", "القليوبيه": "qalyubia", "المنوفيه": "monufia", "اسيوط": "assiut", "اسوان": "aswan",
+    "الاقصر": "luxor", "قنا": "qena", "البحر الاحمر": "red_sea", "مطروح": "matrouh",
+    "مرسى مطروح": "matrouh", "مرسي مطروح": "matrouh", "شمال سيناء": "north_sinai", "شمال سينا": "north_sinai",
 }
+
+# تصنيف المحافظات إلى بنود (البند الأول / البند الثاني / البند الثالث)
+BAND_1 = "البند الأول"
+BAND_2 = "البند الثاني"
+BAND_3 = "البند الثالث"
+
+CITY_BANDS = {
+    # البند الأول (9 محافظات)
+    "cairo": BAND_1,
+    "suez": BAND_1,
+    "ismailia": BAND_1,
+    "port_said": BAND_1,
+    "beheira": BAND_1,
+    "beni_suef": BAND_1,
+    "minya": BAND_1,
+    "south_sinai": BAND_1,
+    "north_sinai": BAND_1,
+
+    # البند الثاني (9 محافظات)
+    "giza": BAND_2,
+    "qalyubia": BAND_2,
+    "monufia": BAND_2,
+    "qena": BAND_2,
+    "aswan": BAND_2,
+    "assiut": BAND_2,
+    "luxor": BAND_2,
+    "red_sea": BAND_2,
+    "matrouh": BAND_2,
+
+    # البند الثالث (9 محافظات)
+    "alexandria": BAND_3,
+    "sharqia": BAND_3,
+    "dakahlia": BAND_3,
+    "gharbia": BAND_3,
+    "damietta": BAND_3,
+    "kafr_el_sheikh": BAND_3,
+    "fayoum": BAND_3,
+    "sohag": BAND_3,
+    "new_valley": BAND_3,
+}
+
+BAND_GOVS_AR = {
+    BAND_1: ["القاهرة", "السويس", "الإسماعيلية", "بورسعيد", "البحيرة", "بني سويف", "المنيا", "جنوب سيناء", "شمال سيناء"],
+    BAND_2: ["الجيزة", "القليوبية", "المنوفية", "قنا", "أسوان", "أسيوط", "الأقصر", "البحر الأحمر", "مرسى مطروح"],
+    BAND_3: ["الإسكندرية", "الشرقية", "الدقهلية", "الغربية", "دمياط", "كفر الشيخ", "الفيوم", "سوهاج", "الوادي الجديد"],
+}
+
+
+def get_gov_band(gov_name_or_code):
+    """تحديد البند التابع له المحافظة (البند الأول / الثاني / الثالث) سواء بالاسم العربي أو الكود الإنجليزي."""
+    if gov_name_or_code is None or (not isinstance(gov_name_or_code, str) and pd.isna(gov_name_or_code)):
+        return "غير محدد"
+    s = str(gov_name_or_code).strip()
+    low = s.lower()
+    if low in CITY_BANDS:
+        return CITY_BANDS[low]
+    code = GOV_MAP.get(norm_ar(s))
+    if code and code in CITY_BANDS:
+        return CITY_BANDS[code]
+    return "غير محدد"
+
 # السماح بمراكز محافظة تانية. فاضي = كل طالب في محافظته بدون استثناء.
 GOV_ALLOW = {}
 
@@ -644,6 +706,28 @@ def distribute(S, C, max_km=MAX_KM, progress=lambda p, m: None, road_mode="facto
     out["gov_code"] = gov_a
     out["distance_type"] = road_label
 
+    # حساب البند لكل طالب (البند الأول / الثاني / الثالث) بناءً على محافظته
+    band_a = np.array([get_gov_band(g) for g in (out[gov_col] if gov_col in out.columns else gov_a)], dtype=object)
+    out["band"] = band_a
+    out["البند"] = band_a
+
+    # وضع عمود "البند" مباشرة بعد عمود المحافظة أمام كل طالب
+    cols = list(out.columns)
+    if "البند" in cols and gov_col in cols:
+        cols.remove("البند")
+        gov_idx = cols.index(gov_col)
+        cols.insert(gov_idx + 1, "البند")
+        out = out[cols]
+
+    # رصد أي طلاب يتبعون البند الثاني لتنبيه المستخدم
+    b2_mask = (band_a == BAND_2)
+    n_b2 = int(b2_mask.sum())
+    b2_gov_counts = {}
+    if n_b2 > 0:
+        b2_gov_counts = dict(Counter(out.loc[b2_mask, gov_col]).most_common())
+        gov_details = "، ".join(f"{g} ({c:,} طالب)" for g, c in b2_gov_counts.items())
+        alerts.insert(0, f"⚠️ تنبيه البنود: تم رصد {n_b2:,} طالب يتبعون «البند الثاني» ({gov_details}) — المطلوب للبند الأول والثالث فقط.")
+
     # قايمة الإحداثيات المشبوهة (للداش بورد والإكسل)
     sc = []
     same_xy = centers.groupby(["lat", "lon"])["Center Code"].apply(list).to_dict()
@@ -660,7 +744,7 @@ def distribute(S, C, max_km=MAX_KM, progress=lambda p, m: None, road_mode="facto
             sc.append({"center_code": c_code[i_c], "center_name": c_name[i_c], "gov": c_city[i_c],
                        "lat": c_lat_a[i_c], "lon": c_lon_a[i_c], "problem": " | ".join(why)})
     sus_centers = pd.DataFrame(sc, columns=["center_code", "center_name", "gov", "lat", "lon", "problem"])
-    sus_cols = [c for c in ["row_no", nid_col, gov_col, area_col, lvl_col] if c]
+    sus_cols = [c for c in ["row_no", nid_col, gov_col, "البند", area_col, lvl_col] if c and c in out.columns]
     sus_students = out.loc[S_sus, sus_cols + ["status", "note"]].copy()
     sus_students["lat"], sus_students["lon"] = lat_a[S_sus], lon_a[S_sus]
 
@@ -681,6 +765,8 @@ def distribute(S, C, max_km=MAX_KM, progress=lambda p, m: None, road_mode="facto
     by_gov = (out.groupby(gov_col).agg(students=("status", "size"), assigned=("_vp", lambda s: int((~s).sum())),
                                        vp=("_vp", "sum")).reset_index().rename(columns={gov_col: "gov"}))
     by_gov["vp_%"] = (100 * by_gov.vp / by_gov.students).round(1)
+    by_gov["band"] = by_gov["gov"].map(get_gov_band)
+    by_gov["البند"] = by_gov["band"]
     by_level = (out.groupby("level_code", dropna=False).agg(students=("status", "size"),
                                                            assigned=("_vp", lambda s: int((~s).sum())),
                                                            vp=("_vp", "sum")).reset_index())
@@ -703,18 +789,20 @@ def distribute(S, C, max_km=MAX_KM, progress=lambda p, m: None, road_mode="facto
         ass_n = int(dem_ass.get((g, k), 0))
         deficit = max(0, cnt - seats)
         gcap = cap_by_key.get(k, overall_cap)
-        rows.append({"gov": g, "level_code": k, "students": int(cnt), "assigned": ass_n,
+        rows.append({"gov": g, "band": get_gov_band(g), "البند": get_gov_band(g), "level_code": k, "students": int(cnt), "assigned": ass_n,
                      "seats_in_gov": seats, "seats": seats, "vp": vp_n,
                      "deficit": deficit, "vp_%": round(100.0 * vp_n / cnt, 1) if cnt else 0.0,
                      "group_capacity": gcap, "extra_groups_needed": math.ceil(deficit / gcap)})
     by_gov_level = pd.DataFrame(rows).sort_values(["gov", "level_code"])
     deficit_df = pd.DataFrame([r for r in rows if r["deficit"] > 0 or r["vp"] > 0],
-                              columns=["gov", "level_code", "students", "seats_in_gov", "vp", "deficit",
+                              columns=["gov", "band", "البند", "level_code", "students", "seats_in_gov", "vp", "deficit",
                                        "group_capacity", "extra_groups_needed"])
     deficit_df = deficit_df.sort_values(["deficit", "vp"], ascending=False)
 
     vp_area = (out[out._vp].groupby([gov_col, area_col, "level_code"]).size().rename("vp_students")
                .reset_index().sort_values("vp_students", ascending=False))
+    vp_area["band"] = vp_area[gov_col].map(get_gov_band)
+    vp_area["البند"] = vp_area["band"]
     center_load = (load.groupby(["center_code", "center_name", "gov", "area"])
                    .agg(groups=("group_code", "size"), seats=("capacity", "sum"), assigned=("assigned", "sum"))
                    .reset_index())
@@ -758,6 +846,7 @@ def distribute(S, C, max_km=MAX_KM, progress=lambda p, m: None, road_mode="facto
         "avg_km": round(float(np.nanmean(dist_out[a_idx])) if len(a_idx) else 0.0, 1),
         "centers": int(nC), "groups": int(len(load)), "seats": int(load.capacity.sum()),
         "vp_reasons": [{"reason": k, "count": v} for k, v in vp_reasons.most_common()],
+        "band2_count": int(n_b2), "band2_govs": b2_gov_counts, "bands": dict(Counter(band_a)),
         "warnings": warnings, "alerts": alerts,
     }
     progress(92, "حفظ الملفات")

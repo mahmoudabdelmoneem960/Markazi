@@ -194,6 +194,17 @@ def run_invalid_nids(run_id):
         return jsonify(error=str(e)), 404
 
 
+@bp.route("/runs/<run_id>/students/band2")
+def run_band2(run_id):
+    p = int(request.args.get("page") or 1)
+    pp = int(request.args.get("per_page") or 50)
+    q = request.args.get("q", "")
+    try:
+        return jsonify(runs.get_band2_students(run_id, page=p, per_page=pp, search=q))
+    except ValueError as e:
+        return jsonify(error=str(e)), 404
+
+
 @bp.route("/runs/<run_id>/students/by_row/<row_no>", methods=["GET", "POST"])
 def run_student_by_row(run_id, row_no):
     if request.method == "POST":

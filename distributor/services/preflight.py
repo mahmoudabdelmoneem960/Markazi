@@ -54,9 +54,25 @@ def preflight(S_raw, C_raw):
         st["govs"] = gov_codes.value_counts().to_dict()
         if st["unknown_gov_count"]:
             _issue(issues, "warn", f"{st['unknown_gov_count']:,} طالب محافظتهم غير معروفة (هيبقوا VP): " + "، ".join(list(st["unknown_gov"])[:5]))
+
+        # تحليل البنود ورصد طلاب البند الثاني
+        bands_series = S[sc["gov"]].map(engine.get_gov_band)
+        st["bands"] = bands_series.value_counts().to_dict()
+        is_b2 = (bands_series == engine.BAND_2)
+        st["band2_count"] = int(is_b2.sum())
+        if st["band2_count"]:
+            b2_govs = S.loc[is_b2, sc["gov"]].astype(str).str.strip().value_counts().to_dict()
+            st["band2_govs"] = b2_govs
+            govs_str = "، ".join(f"{g} ({cnt:,} طالب)" for g, cnt in b2_govs.items())
+            _issue(issues, "warn", f"⚠️ تنبيه البنود: الشيت يحتوي على {st['band2_count']:,} طالب من محافظات «البند الثاني» ({govs_str}). التشغيل الحالي مخصص للبندين الأول والثالث فقط — يرجى مراجعتهم أو تعديلهم من الشيت.")
+        else:
+            st["band2_govs"] = {}
     else:
         gov_codes = pd.Series([None] * n)
         st["govs"] = {}
+        st["bands"] = {}
+        st["band2_count"] = 0
+        st["band2_govs"] = {}
     if sc["level"]:
         lv = S[sc["level"]].map(engine.level_key)
         st["levels"] = lv.value_counts().to_dict()

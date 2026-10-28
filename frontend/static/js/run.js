@@ -134,17 +134,51 @@ function render(r) {
 
   // تنبيهات مع أزرار تفاعلية فورية
   $("#alerts").innerHTML = (s.alerts || []).map(a => {
-    const m = a.match(/\b([A-Z0-9_]{3,12})\s*\((\d+)\s*كم\)/);
-    const centerBtn = m ? `<button class="btn sm" style="margin-right:10px" onclick="openCenterFix('${esc(m[1])}')">📍 فحص وتصحيح موقع ${esc(m[1])}</button>` : "";
-    return `<div class="alert" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px"><span>⚠ ${esc(a)}</span>${centerBtn}</div>`;
+    let actionBtn = "";
+    if (a.includes("البند الثاني")) {
+      actionBtn = `<button class="btn sm bad" style="margin-right:10px" onclick="openBand2Modal()">⚠️ عرض طلاب البند الثاني (${n(s.band2_count || 0)})</button>`;
+    } else {
+      const m = a.match(/\b([A-Z0-9_]{3,12})\s*\((\d+)\s*كم\)/);
+      if (m) actionBtn = `<button class="btn sm" style="margin-right:10px" onclick="openCenterFix('${esc(m[1])}')">📍 فحص وتصحيح موقع ${esc(m[1])}</button>`;
+    }
+    return `<div class="alert" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px"><span>⚠ ${esc(a)}</span>${actionBtn}</div>`;
   }).join("");
 
   const assignedRatio = s.students > 0 ? Math.round((s.assigned / s.students) * 100) : 0;
-  const govCount = (r.by_gov || []).length;
+  const govs = r.by_gov || [];
+  const govCount = govs.length;
+
+  let b1GovCount = 0, b2GovCount = 0, b3GovCount = 0;
+  let b2GovNames = [];
+  govs.forEach(g => {
+    const band = g.band || g["البند"] || getGovBand(g.gov);
+    if (band === "البند الأول") b1GovCount++;
+    else if (band === "البند الثاني") {
+      b2GovCount++;
+      b2GovNames.push(govAr(g.gov));
+    }
+    else if (band === "البند الثالث") b3GovCount++;
+  });
+
+  const b2KpiBadge = b2GovCount > 0
+    ? `<div style="margin-top:4px"><span class="badge bad" style="font-size:11px;font-weight:700" title="مشكلة في البيانات: تم رصد طلاب في محافظات البند الثاني!">⚠️ بند ثاني: ${b2GovCount} (${esc(b2GovNames.join("، "))})</span></div>`
+    : `<div style="font-size:11px;color:var(--mute);margin-top:4px">بند ثاني: 0 (سليم ✓)</div>`;
+
+  const govKpiValue = `
+    <div>
+      <div style="font-size:26px;font-weight:700;line-height:1.1">${n(govCount)} <small style="font-size:13px;font-weight:600;color:var(--mute)">محافظة</small></div>
+      <div style="font-size:12px;font-weight:600;margin-top:4px;display:flex;gap:4px;justify-content:center;flex-wrap:wrap">
+        <span class="pill brand" style="padding:1px 6px">بند 1: <b>${b1GovCount}</b></span>
+        <span class="pill ok" style="padding:1px 6px">بند 3: <b>${b3GovCount}</b></span>
+      </div>
+      ${b2KpiBadge}
+    </div>
+  `;
+
   $("#kpis").innerHTML =
     k(`${n(s.assigned)} <small style="font-size:15px;color:var(--ok)">(${assignedRatio}%)</small>`, "الطلاب المسكنين بنجاح", "ok", "kpi-ok") +
     k(n(s.students), "إجمالي عدد الطلاب", "", "kpi-brand") +
-    k(n(govCount), "عدد المحافظات", "", "") +
+    k(govKpiValue, "عدد المحافظات في كل بند", b2GovCount > 0 ? "bad" : "", b2GovCount > 0 ? "kpi-bad" : "kpi-brand") +
     k(n(s.vp), "قيد الانتظار (VP)", "bad", "kpi-bad") +
     k(n(s.same_area), "في نفس منطقتهم السكنية", "", "kpi-ok") +
     k((s.avg_km || "0") + " كم", "متوسط مسافة الطريق", "brand", "kpi-brand") +
@@ -267,7 +301,21 @@ function render(r) {
     table("#t_suss", susCols, ss);
   }
 
-  table("#t_def", [["gov", "المحافظة", v => esc(govAr(v))], ["level_code", "الليفيل/التراك"], ["students", "طلاب"], ["seats_in_gov", "مقاعد المحافظة"], ["vp", "VP"], ["deficit", "العجز"], ["group_capacity", "سعة الجروب"], ["extra_groups_needed", "جروبات إضافية"]], r.deficit);
+  table("#t_def", [
+    ["gov", "المحافظة", v => esc(govAr(v))],
+    ["band", "البند", (v, r) => {
+      const b = v || r.البند || getGovBand(r.gov);
+      const isB2 = (b === "البند الثاني");
+      return `<span class="pill ${isB2 ? 'bad' : b === 'البند الأول' ? 'brand' : 'ok'}" ${isB2 ? 'style="font-weight:700"' : ''}>${isB2 ? '⚠️ ' : ''}${esc(b)}</span>`;
+    }],
+    ["level_code", "الليفيل/التراك"],
+    ["students", "طلاب"],
+    ["seats_in_gov", "مقاعد المحافظة"],
+    ["vp", "VP"],
+    ["deficit", "العجز"],
+    ["group_capacity", "سعة الجروب"],
+    ["extra_groups_needed", "جروبات إضافية"]
+  ], r.deficit);
   initGovSection(r.by_gov);
   initCentersSection(r.center_load);
   table("#t_lvl", [["level_code", "الليفيل/التراك"], ["students", "طلاب"], ["assigned", "موزعين"], ["vp", "VP"], ["seats_all_egypt", "مقاعد (كل مصر)"]], r.by_level);
@@ -293,23 +341,327 @@ function normGov(g) {
   return s;
 }
 
-function initGovSection(byGov) {
-  const sortedGovs = (byGov || []).slice().sort((a, b) => (Number(b.students) || 0) - (Number(a.students) || 0));
-  const sel = $("#sel_gov");
-  if (sel) {
-    let opts = '<option value="">-- كل المحافظات (عرض عام) --</option>';
-    sortedGovs.forEach(g => {
-      const code = normGov(g.gov);
-      const name = govAr(g.gov);
-      opts += `<option value="${esc(code)}">${esc(name)} (${n(g.students)} طالب)</option>`;
-    });
-    sel.innerHTML = opts;
-    sel.value = CURRENT_SELECTED_GOV || "";
+let ALL_SORTED_GOVS = [];
+const ALL_BANDS = ["البند الأول", "البند الثالث", "البند الثاني"];
+let SELECTED_BANDS = new Set(ALL_BANDS);
+let SELECTED_GOVS = new Set();
+let GOV_SEARCH_QUERY = "";
+
+// إغلاق القائمة المنسدلة لاختيار المحافظات عند النقر في أي مكان خارجها
+document.addEventListener("click", (e) => {
+  const dd = $("#gov_multiselect_dropdown");
+  const btn = $("#btn_open_gov_picker");
+  if (dd && dd.style.display !== "none") {
+    if (!dd.contains(e.target) && !btn?.contains(e.target)) {
+      closeGovDropdown();
+    }
+  }
+});
+
+function toggleGovDropdown(e) {
+  if (e) e.stopPropagation();
+  const dd = $("#gov_multiselect_dropdown");
+  if (!dd) return;
+  const isOpen = dd.style.display !== "none";
+  if (isOpen) {
+    closeGovDropdown();
+  } else {
+    dd.style.display = "block";
+    const sBox = $("#gov_search_box");
+    if (sBox) {
+      sBox.value = GOV_SEARCH_QUERY || "";
+      setTimeout(() => sBox.focus(), 60);
+    }
+    renderGovCheckboxes();
+  }
+}
+
+function closeGovDropdown() {
+  const dd = $("#gov_multiselect_dropdown");
+  if (dd) dd.style.display = "none";
+}
+
+function onGovSearchInput(val) {
+  GOV_SEARCH_QUERY = (val || "").trim().toLowerCase();
+  renderGovCheckboxes();
+}
+
+function renderGovCheckboxes() {
+  const container = $("#gov_checkboxes_list");
+  if (!container) return;
+
+  const q = (GOV_SEARCH_QUERY || "").replace(/[أإآ]/g, "ا").replace(/ة/g, "ه");
+
+  const matches = ALL_SORTED_GOVS.filter(g => {
+    if (!q) return true;
+    const name = (govAr(g.gov) || "").replace(/[أإآ]/g, "ا").replace(/ة/g, "ه");
+    const code = (normGov(g.gov) || "").toLowerCase();
+    const b = (g.band || g["البند"] || getGovBand(g.gov) || "").replace(/[أإآ]/g, "ا").replace(/ة/g, "ه");
+    return name.includes(q) || code.includes(q) || b.includes(q);
+  });
+
+  if (!matches.length) {
+    container.innerHTML = `<div class="mute small" style="padding:14px;text-align:center">لا توجد محافظات مطابقة للبحث "${esc(GOV_SEARCH_QUERY)}"</div>`;
+    return;
   }
 
-  // جدول كل المحافظات مرتب من الأكبر عدداً إلى الأقل عدداً
+  container.innerHTML = matches.map(g => {
+    const code = normGov(g.gov);
+    const arName = govAr(g.gov);
+    const b = g.band || g["البند"] || getGovBand(g.gov);
+    const isB2 = (b === "البند الثاني");
+    const isChecked = SELECTED_GOVS.has(code);
+    const pillClass = isB2 ? "pill bad" : (b === "البند الأول" ? "pill brand" : "pill ok");
+
+    return `
+      <label class="gov-checkbox-item">
+        <div style="display:flex;align-items:center;gap:8px">
+          <input type="checkbox" ${isChecked ? "checked" : ""} onchange="toggleGovCheckbox('${esc(code)}')" style="cursor:pointer;accent-color:var(--brand);width:16px;height:16px">
+          <span style="font-weight:600;font-size:13px">${isB2 ? '⚠️ ' : ''}${esc(arName)}</span>
+          <span class="${pillClass}" style="font-size:10px;padding:1px 6px">${esc(b)}</span>
+        </div>
+        <span class="small mute" style="font-size:11.5px">${n(g.students)} طالب</span>
+      </label>
+    `;
+  }).join("");
+
+  const counter = $("#gov_selected_counter");
+  if (counter) {
+    counter.textContent = `تم تحديد ${SELECTED_GOVS.size} من ${ALL_SORTED_GOVS.length} محافظة`;
+  }
+}
+
+function toggleGovCheckbox(govCode) {
+  if (SELECTED_GOVS.has(govCode)) {
+    SELECTED_GOVS.delete(govCode);
+  } else {
+    SELECTED_GOVS.add(govCode);
+  }
+  const counter = $("#gov_selected_counter");
+  if (counter) {
+    counter.textContent = `تم تحديد ${SELECTED_GOVS.size} من ${ALL_SORTED_GOVS.length} محافظة`;
+  }
+  applyCombinedGovFilter();
+}
+
+function selectAllGovs(select) {
+  if (select) {
+    SELECTED_GOVS = new Set(ALL_SORTED_GOVS.map(g => normGov(g.gov)));
+  } else {
+    SELECTED_GOVS.clear();
+  }
+  renderGovCheckboxes();
+  applyCombinedGovFilter();
+}
+
+function selectGovsByBandQuick(bandName) {
+  const subset = ALL_SORTED_GOVS.filter(g => (g.band || g["البند"] || getGovBand(g.gov)) === bandName);
+  SELECTED_GOVS = new Set(subset.map(g => normGov(g.gov)));
+  SELECTED_BANDS.add(bandName);
+  renderGovCheckboxes();
+  applyCombinedGovFilter();
+}
+
+function setBandFilterQuick(mode) {
+  if (mode === "all") {
+    SELECTED_BANDS = new Set(ALL_BANDS);
+  } else if (mode === "b1") {
+    SELECTED_BANDS = new Set(["البند الأول"]);
+  } else if (mode === "b3") {
+    SELECTED_BANDS = new Set(["البند الثالث"]);
+  } else if (mode === "b2") {
+    SELECTED_BANDS = new Set(["البند الثاني"]);
+  }
+  applyCombinedGovFilter();
+}
+
+function toggleBandSelection(bandName) {
+  if (SELECTED_BANDS.has(bandName)) {
+    SELECTED_BANDS.delete(bandName);
+  } else {
+    SELECTED_BANDS.add(bandName);
+  }
+  applyCombinedGovFilter();
+}
+
+function removeBandFilter(bandName) {
+  SELECTED_BANDS.delete(bandName);
+  applyCombinedGovFilter();
+}
+
+function removeGovFilter(govCode) {
+  SELECTED_GOVS.delete(govCode);
+  renderGovCheckboxes();
+  applyCombinedGovFilter();
+}
+
+function clearAllGovFilters() {
+  SELECTED_BANDS = new Set(ALL_BANDS);
+  SELECTED_GOVS = new Set(ALL_SORTED_GOVS.map(g => normGov(g.gov)));
+  GOV_SEARCH_QUERY = "";
+  const sBox = $("#gov_search_box");
+  if (sBox) sBox.value = "";
+  renderGovCheckboxes();
+  applyCombinedGovFilter();
+}
+
+function applyCombinedGovFilter() {
+  // 1. تحديث شكل أزرار البنود
+  const allBtn = $("#gbf_all");
+  const isAllBands = (SELECTED_BANDS.size === ALL_BANDS.length);
+  if (allBtn) {
+    allBtn.className = isAllBands ? "btn sm on" : "btn sm sec";
+  }
+
+  const b1Btn = $("#gbf_b1");
+  const b1Chk = $("#gbf_chk_b1");
+  const hasB1 = SELECTED_BANDS.has("البند الأول");
+  if (b1Btn) b1Btn.className = hasB1 ? "btn sm on brand" : "btn sm sec";
+  if (b1Chk) b1Chk.textContent = hasB1 ? "✓" : "○";
+
+  const b3Btn = $("#gbf_b3");
+  const b3Chk = $("#gbf_chk_b3");
+  const hasB3 = SELECTED_BANDS.has("البند الثالث");
+  if (b3Btn) b3Btn.className = hasB3 ? "btn sm on ok" : "btn sm sec";
+  if (b3Chk) b3Chk.textContent = hasB3 ? "✓" : "○";
+
+  const b2Btn = $("#gbf_b2");
+  const b2Chk = $("#gbf_chk_b2");
+  const hasB2 = SELECTED_BANDS.has("البند الثاني");
+  if (b2Btn) b2Btn.className = hasB2 ? "btn sm on bad" : "btn sm sec bad";
+  if (b2Chk) b2Chk.textContent = hasB2 ? "✓" : "○";
+
+  // 2. تحديث شارة زر اختيار المحافظات
+  const pickerBadge = $("#gov_picker_badge");
+  if (pickerBadge) {
+    if (SELECTED_GOVS.size === ALL_SORTED_GOVS.length) {
+      pickerBadge.textContent = `كل المحافظات (${ALL_SORTED_GOVS.length})`;
+      pickerBadge.className = "badge brand";
+    } else if (SELECTED_GOVS.size === 0) {
+      pickerBadge.textContent = "لم تحدد أي محافظة (0)";
+      pickerBadge.className = "badge bad";
+    } else {
+      pickerBadge.textContent = `محدد (${SELECTED_GOVS.size} محافظة)`;
+      pickerBadge.className = "badge ok";
+    }
+  }
+
+  // 3. تصفية البيانات المشتركة (AND): البند المختار + المحافظة المختارة
+  const filtered = ALL_SORTED_GOVS.filter(g => {
+    const b = g.band || g["البند"] || getGovBand(g.gov);
+    const code = normGov(g.gov);
+    const bandMatch = SELECTED_BANDS.has(b);
+    const govMatch = SELECTED_GOVS.has(code);
+    return bandMatch && govMatch;
+  });
+
+  // 4. رسم صفوف الجدول المفلترة
+  renderGovTableRows(filtered);
+
+  // 5. تحديث شريط الفلاتر المطبقة
+  const tagsContainer = $("#active_filter_tags");
+  const clearBtn = $("#btn_clear_all_filters");
+  const isBandsFiltered = (SELECTED_BANDS.size < ALL_BANDS.length);
+  const isGovsFiltered = (SELECTED_GOVS.size < ALL_SORTED_GOVS.length);
+  const isFiltered = isBandsFiltered || isGovsFiltered;
+
+  if (clearBtn) clearBtn.style.display = isFiltered ? "inline-block" : "none";
+
+  if (tagsContainer) {
+    if (!isFiltered) {
+      tagsContainer.innerHTML = `<span class="small mute">عرض كل المحافظات والبنود (بدون تصفية)</span>`;
+    } else {
+      const tagsHtml = [];
+
+      // وسوم البنود
+      if (isBandsFiltered) {
+        if (SELECTED_BANDS.size === 0) {
+          tagsHtml.push(`<span class="filter-tag" style="color:var(--bad)">لم يتم تحديد أي بند</span>`);
+        } else {
+          SELECTED_BANDS.forEach(b => {
+            const isB2 = (b === "البند الثاني");
+            tagsHtml.push(`
+              <span class="filter-tag ${isB2 ? 'bad' : ''}">
+                ${isB2 ? '⚠️ ' : ''}${esc(b)}
+                <span class="remove-btn" onclick="removeBandFilter('${esc(b)}')" title="إزالة هذا البند">✕</span>
+              </span>
+            `);
+          });
+        }
+      }
+
+      // وسوم المحافظات
+      if (isGovsFiltered) {
+        if (SELECTED_GOVS.size === 0) {
+          tagsHtml.push(`<span class="filter-tag" style="color:var(--bad)">لم يتم تحديد أي محافظة</span>`);
+        } else if (SELECTED_GOVS.size <= 5) {
+          SELECTED_GOVS.forEach(code => {
+            tagsHtml.push(`
+              <span class="filter-tag">
+                ${esc(govAr(code))}
+                <span class="remove-btn" onclick="removeGovFilter('${esc(code)}')" title="إزالة هذه المحافظة">✕</span>
+              </span>
+            `);
+          });
+        } else {
+          tagsHtml.push(`
+            <span class="filter-tag">
+              🏛️ ${SELECTED_GOVS.size} محافظة محددة
+              <span class="remove-btn" onclick="selectAllGovs(true)" title="تحديد كل المحافظات">✕</span>
+            </span>
+          `);
+        }
+      }
+
+      tagsContainer.innerHTML = tagsHtml.join("");
+    }
+  }
+
+  // 6. ملخص إحصائيات الفلتر
+  const summaryBox = $("#gov_filtered_kpis_summary");
+  if (summaryBox) {
+    const sumStudents = filtered.reduce((acc, g) => acc + (Number(g.students) || 0), 0);
+    const sumAssigned = filtered.reduce((acc, g) => acc + (Number(g.assigned) || 0), 0);
+    const sumVp = filtered.reduce((acc, g) => acc + (Number(g.vp) || 0), 0);
+    const pct = sumStudents > 0 ? Math.round((sumAssigned / sumStudents) * 100) : 0;
+
+    summaryBox.innerHTML = `
+      معروض: <b>${filtered.length}</b> محافظة · طلاب: <b>${n(sumStudents)}</b> · مسكنين: <b class="ok">${n(sumAssigned)}</b> (${pct}%) · مقترح VP: <b class="${sumVp > 0 ? 'bad' : 'ok'}">${n(sumVp)}</b>
+    `;
+  }
+
+  // تحديث عداد الدروب داون
+  const counter = $("#gov_selected_counter");
+  if (counter) {
+    counter.textContent = `تم تحديد ${SELECTED_GOVS.size} من ${ALL_SORTED_GOVS.length} محافظة`;
+  }
+}
+
+function renderGovTableRows(govsList) {
   table("#t_gov", [
-    ["gov", "المحافظة", v => `<b>${esc(govAr(v))}</b>`],
+    ["gov", "المحافظة", (v, row) => {
+      const b = row.band || row["البند"] || getGovBand(v);
+      const isB2 = (b === "البند الثاني");
+      return `
+        <div>
+          <b>${isB2 ? '⚠️ ' : ''}${esc(govAr(v))}</b>
+          ${isB2 ? '<small class="bad" style="display:block;font-size:11px;font-weight:700">محافظة بند ثاني (مشكلة بالبيانات)</small>' : ''}
+        </div>
+      `;
+    }],
+    ["band", "البند", (v, row) => {
+      const b = v || row["البند"] || getGovBand(row.gov);
+      if (b === "البند الثاني") {
+        return `<span class="badge bad" style="font-weight:700;font-size:12px;padding:3px 8px">⚠️ البند الثاني (خطأ)</span>`;
+      }
+      if (b === "البند الأول") {
+        return `<span class="pill brand" style="font-weight:700">البند الأول</span>`;
+      }
+      if (b === "البند الثالث") {
+        return `<span class="pill ok" style="font-weight:700">البند الثالث</span>`;
+      }
+      return `<span class="pill mute">${esc(b || "غير محدد")}</span>`;
+    }],
     ["students", "إجمالي الطلاب", v => n(v)],
     ["assigned", "تم توزيعهم", v => `<span class="ok" style="font-weight:600">${n(v)}</span>`],
     ["vp", "مقترح VP", v => `<span class="${v ? 'bad' : ''}">${n(v)}</span>`],
@@ -320,9 +672,48 @@ function initGovSection(byGov) {
     ["actions", "التفاصيل", (_, row) => `
       <button class="btn sm sec" onclick="event.stopPropagation(); selectGov('${esc(normGov(row.gov))}')">👁️ عرض التفاصيل</button>
     `]
-  ], sortedGovs, {
-    rowAttr: row => `class="click" onclick="selectGov('${esc(normGov(row.gov))}')" title="اضغط لعرض تفاصيل ${esc(govAr(row.gov))}"`
+  ], govsList, {
+    empty: "لا توجد محافظات مطابقة لمعايير الفلترة المحددة",
+    rowAttr: row => {
+      const b = row.band || row["البند"] || getGovBand(row.gov);
+      const isB2 = (b === "البند الثاني");
+      const bg = isB2 ? 'style="background:rgba(239, 68, 68, 0.08);border-right:4px solid var(--bad)"' : '';
+      return `class="click ${isB2 ? 'row-bad' : ''}" ${bg} onclick="selectGov('${esc(normGov(row.gov))}')" title="اضغط لعرض تفاصيل ${esc(govAr(row.gov))}${isB2 ? ' (تحذير: بند ثاني)' : ''}"`;
+    }
   });
+}
+
+function initGovSection(byGov) {
+  ALL_SORTED_GOVS = (byGov || []).slice().sort((a, b) => (Number(b.students) || 0) - (Number(a.students) || 0));
+
+  let b1Cnt = 0, b2Cnt = 0, b3Cnt = 0;
+  ALL_SORTED_GOVS.forEach(g => {
+    const b = g.band || g["البند"] || getGovBand(g.gov);
+    if (b === "البند الأول") b1Cnt++;
+    else if (b === "البند الثاني") b2Cnt++;
+    else if (b === "البند الثالث") b3Cnt++;
+  });
+
+  if ($("#gbf_cnt_b1")) $("#gbf_cnt_b1").textContent = b1Cnt;
+  if ($("#gbf_cnt_b3")) $("#gbf_cnt_b3").textContent = b3Cnt;
+  if ($("#gbf_cnt_b2")) $("#gbf_cnt_b2").textContent = b2Cnt;
+
+  const pillsBox = $("#gov_bands_pills");
+  if (pillsBox) {
+    pillsBox.innerHTML = `
+      <span class="pill brand" style="padding:2px 8px">البند الأول: <b>${b1Cnt}</b></span>
+      <span class="pill ok" style="padding:2px 8px">البند الثالث: <b>${b3Cnt}</b></span>
+      ${b2Cnt > 0 ? `<span class="badge bad" style="padding:2px 8px;font-weight:700">⚠️ البند الثاني: <b>${b2Cnt}</b> (مشكلة في البيانات)</span>` : ''}
+    `;
+  }
+
+  // تهيئة الفلاتر المحددة (كل البنود وكل المحافظات افتراضياً)
+  SELECTED_BANDS = new Set(ALL_BANDS);
+  SELECTED_GOVS = new Set(ALL_SORTED_GOVS.map(g => normGov(g.gov)));
+  GOV_SEARCH_QUERY = "";
+
+  renderGovCheckboxes();
+  applyCombinedGovFilter();
 
   if (CURRENT_SELECTED_GOV) {
     selectGov(CURRENT_SELECTED_GOV);
@@ -348,14 +739,21 @@ function selectGov(govCode) {
   const obox = $("#gov_overview_box");
   const dbox = $("#gov_detail_box");
   const abtn = $("#btn_all_govs");
+  const fpanel = $("#gov_filter_panel");
   if (obox) obox.style.display = "none";
+  if (fpanel) fpanel.style.display = "none";
   if (dbox) dbox.style.display = "block";
   if (abtn) abtn.style.display = "inline-block";
 
   const gData = (RES.by_gov || []).find(x => normGov(x.gov) === govCode) || {gov: govCode, students: 0, assigned: 0, vp: 0, "vp_%": 0};
   const arName = govAr(govCode);
+  const b = gData.band || gData["البند"] || getGovBand(govCode);
+  const isB2 = (b === "البند الثاني");
+  const bBadge = isB2
+    ? '<span class="badge bad" style="margin-right:8px;font-size:13px;padding:3px 8px">⚠️ البند الثاني (مشكلة بالبيانات)</span>'
+    : `<span class="pill ${b === 'البند الأول' ? 'brand' : 'ok'}" style="margin-right:8px;font-weight:600">${b}</span>`;
 
-  $("#gov_detail_title").textContent = `تفاصيل محافظة ${arName}`;
+  $("#gov_detail_title").innerHTML = `تفاصيل محافظة ${arName} ${bBadge}`;
   $("#gov_detail_sub").textContent = `إجمالي طلاب المحافظة: ${n(gData.students)} طالب · الموزعين: ${n(gData.assigned)} · المقترح VP: ${n(gData.vp)} (${gData["vp_%"] || 0}%)`;
   $("#gov_hint").textContent = `أنت تتصفح الآن التفاصيل الكاملة لمحافظة ${arName}.`;
 
@@ -366,7 +764,11 @@ function selectGov(govCode) {
   // كروت مؤشرات المحافظة
   const k = (v, l, c) => `<div class="kpi"><b class="${c || ""}">${v}</b><span>${l}</span></div>`;
   const pctAssigned = gData.students ? Math.round(100 * (gData.assigned || 0) / gData.students) : 0;
-  $("#gov_kpis").innerHTML =
+  let b2AlertHtml = "";
+  if (isB2) {
+    b2AlertHtml = `<div class="alert" style="margin-bottom:12px;background:var(--bad-bg);border:1px solid var(--bad-border);color:var(--bad);padding:10px 14px;border-radius:var(--radius-md)">⚠️ <b>تنبيه هام:</b> محافظة ${arName} تتبع «البند الثاني»، في حين أن هذا التشغيل مخصص للبندين الأول والثالث فقط. وجود ${n(gData.students)} طالب بها يعتبر خطأ في البيانات ويجب تعديلهم من الملف الأصلي.</div>`;
+  }
+  $("#gov_kpis").innerHTML = b2AlertHtml +
     k(n(gData.students), "طلاب المحافظة") +
     k(n(gData.assigned) + ` <small class="small">(${pctAssigned}%)</small>`, "تم توزيعهم", "ok") +
     k(n(gData.vp) + ` <small class="small">(${gData["vp_%"] || 0}%)</small>`, "مقترح VP", gData.vp ? "bad" : "ok") +
@@ -413,7 +815,9 @@ function resetGovView() {
   const obox = $("#gov_overview_box");
   const dbox = $("#gov_detail_box");
   const abtn = $("#btn_all_govs");
+  const fpanel = $("#gov_filter_panel");
   if (obox) obox.style.display = "block";
+  if (fpanel) fpanel.style.display = "block";
   if (dbox) dbox.style.display = "none";
   if (abtn) abtn.style.display = "none";
   const gh = $("#gov_hint");
@@ -864,6 +1268,60 @@ async function saveStudentModal() {
   toast(`تم حفظ تعديل الطالب صف ${CURRENT_STUDENT_ROW} بنجاح ✓`, "ok");
   closeModal('modal_student_inspect');
   await loadResult();
+}
+
+// ---------------- نافذة عرض وتعديل طلاب البند الثاني ----------------
+let _b2SearchTimer = null;
+let CURRENT_B2_DATA = [];
+
+function searchBand2Students() {
+  clearTimeout(_b2SearchTimer);
+  _b2SearchTimer = setTimeout(() => openBand2Modal(1, $("#mb2_search")?.value || ""), 300);
+}
+
+async function openBand2Modal(page = 1, q = "") {
+  $("#modal_band2_students").hidden = false;
+  $("#t_mb2").innerHTML = "<tr><td class='mute'>جاري تحميل طلاب البند الثاني...</td></tr>";
+
+  const res = await api(`/api/runs/${RUN.id}/students/band2?page=${page}&per_page=100&q=${encodeURIComponent(q)}`);
+  if (!res.ok) {
+    $("#t_mb2").innerHTML = `<tr><td class='bad'>${esc(res.j.error || "فشل التحميل")}</td></tr>`;
+    return;
+  }
+  const d = res.j;
+  CURRENT_B2_DATA = d.rows || [];
+  $("#mb2_count").textContent = n(d.total);
+  $("#mb2_hint").textContent = d.total ? `معروض ${d.rows.length} من إجمالي ${n(d.total)} طالب في البند الثاني` : "لا يوجد طلاب في البند الثاني";
+
+  const nidCol = d.cols.find(c => c.toLowerCase().includes("nid")) || "Student NID";
+  const cols = [
+    ["row_no", "صف في الشيت", v => `<b class="badge brand">${esc(v)}</b>`],
+    [nidCol, "الرقم القومي", v => `<span style="font-family:monospace;font-weight:600">${esc(v)}</span>`],
+    ["gov", "المحافظة", v => `<span class="badge bad">⚠️ ${esc(govAr(v))}</span>`],
+    ["Area", "المنطقة"],
+    ["Adress", "العنوان", v => esc((v || '').slice(0, 35))],
+    ["Level(25-26)", "المستوى", v => esc(v || '')],
+    ["status", "الحالة", v => `<span class="badge ${v === 'VP' ? 'bad' : 'ok'}">${esc(v || '')}</span>`],
+    ["actions", "فحص وتعديل", (_, r) => `<button class="btn sm" onclick="viewStudentRow('${RUN.id}','${esc(r.row_no)}')">✏️ تعديل الطالب</button>`]
+  ];
+  table("#t_mb2", cols, d.rows);
+}
+
+function copyBand2Nids() {
+  if (!CURRENT_B2_DATA || !CURRENT_B2_DATA.length) {
+    toast("لا توجد بيانات لنسخها", "warn");
+    return;
+  }
+  const nids = CURRENT_B2_DATA.map(r => r["Student NID"] || r["student nid"] || r["nid"] || "").filter(Boolean);
+  if (!nids.length) {
+    toast("لم يتم العثور على أرقام قومية", "warn");
+    return;
+  }
+  navigator.clipboard.writeText(nids.join("\n")).then(() => {
+    toast(`تم نسخ ${n(nids.length)} رقم قومي للحافظة بنجاح ✓`, "ok");
+  }).catch(() => {
+    toast("تعذر النسخ التلقائي للحافظة", "bad");
+  });
 }
 
 // ---------------- نافذة عرض كل الطلاب بأرقام قومية غير صحيحة ----------------

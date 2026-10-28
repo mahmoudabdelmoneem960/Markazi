@@ -965,3 +965,60 @@ tr.click { cursor: pointer; }
   border-top: 1px solid var(--line);
   margin-top: 40px;
 }
+
+tr.row-bad td {
+  background: rgba(239, 68, 68, 0.08) !important;
+}
+tr.row-bad:hover td {
+  background: rgba(239, 68, 68, 0.14) !important;
+}
+
+/* Multi-Select Gov & Band Filter Panel */
+.gov-filter-panel {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 14px 18px;
+  margin-bottom: 16px;
+  box-shadow: var(--shadow-sm);
+}
+
+.gov-checkbox-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.15s ease;
+  font-size: 13px;
+  user-select: none;
+}
+
+.gov-checkbox-item:hover {
+  background: var(--soft);
+}
+
+.filter-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-full);
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.filter-tag .remove-btn {
+  cursor: pointer;
+  color: var(--mute);
+  font-weight: 700;
+  margin-right: 4px;
+}
+
+.filter-tag .remove-btn:hover {
+  color: var(--bad);
+}

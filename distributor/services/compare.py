@@ -4,6 +4,7 @@ import io
 import numpy as np
 import pandas as pd
 
+from distributor.core import engine
 from distributor.services import runs
 
 OK = "تم التوزيع"
@@ -74,7 +75,7 @@ def compare(a_id, b_id, max_changed=3000):
     for g, ix in a.groupby("gov_code").groups.items():
         a_, b_ = a.loc[ix], b.loc[ix]
         o1, o2 = _outcome(a_), _outcome(b_)
-        gov_rows.append({"gov": GOV_AR.get(g, g), "gov_code": g, "students": int(len(ix)),
+        gov_rows.append({"gov": GOV_AR.get(g, g), "gov_code": g, "band": engine.get_gov_band(g), "البند": engine.get_gov_band(g), "students": int(len(ix)),
                          "assigned_a": int((a_["status"] == OK).sum()), "assigned_b": int((b_["status"] == OK).sum()),
                          "vp_a": int((a_["status"] == "VP").sum()), "vp_b": int((b_["status"] == "VP").sum()),
                          "same_pct": round(100 * float((o1 == o2).mean()), 1),
@@ -83,7 +84,7 @@ def compare(a_id, b_id, max_changed=3000):
     gov_rows.sort(key=lambda x: -x["students"])
     # الطلاب اللي اتغيروا
     ch_mask = oa != ob
-    cols = [c for c in ("gov", "Area", "Adress", "level_code") if c in a.columns]
+    cols = [c for c in ("gov", "البند", "Area", "Adress", "level_code") if c in a.columns]
     ch = a.loc[ch_mask, cols].copy()
     ch.insert(0, "key", a.index[ch_mask])
     ch["status_a"] = a.loc[ch_mask, "status"].to_numpy()

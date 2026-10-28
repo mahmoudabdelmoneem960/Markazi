@@ -234,9 +234,21 @@ function renderPreflight(p) {
   const lv = Object.entries(s.levels || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${esc(k)} <b>${n(v)}</b>`).join(" · ");
   const gv = Object.entries(s.govs || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${esc(govAr(k))} <b>${n(v)}</b>`).join(" · ");
 
+  const bList = [];
+  if (s.bands) {
+    if (s.bands["البند الأول"]) bList.push(`<span class="pill brand">البند الأول: <b>${n(s.bands["البند الأول"])}</b></span>`);
+    if (s.bands["البند الثالث"]) bList.push(`<span class="pill ok">البند الثالث: <b>${n(s.bands["البند الثالث"])}</b></span>`);
+    if (s.bands["البند الثاني"]) {
+      const b2GovsStr = s.band2_govs ? Object.entries(s.band2_govs).map(([g, cnt]) => `${esc(g)} (${n(cnt)})`).join("، ") : "";
+      bList.push(`<span class="pill bad" style="font-weight:700">⚠️ البند الثاني: <b>${n(s.bands["البند الثاني"])}</b> (${esc(b2GovsStr)})</span>`);
+    }
+  }
+  const bandsHtml = bList.join(" ") || "—";
+
   $("#pf_students").innerHTML = kv([
     ["عدد صفوف الطلاب", `<b>${n(s.rows)}</b> طالب`],
     ["اسم الملف", esc(p.files.students) + (s.adapted_note ? `<div class="small mute">${esc(s.adapted_note)}</div>` : "")],
+    ["تصنيف البنود (المستهدف: 1 و 3)", bandsHtml, s.band2_count ? "warn" : "ok"],
     ["أرقام قومية غير صالحة / مكررة", s.nid_invalid == null ? "—" : `${n(s.nid_invalid)} غير صالح / ${n(s.nid_dup)} مكرر`, (s.nid_invalid || s.nid_dup) ? "warn" : "ok"],
     ["محافظات غير معروفة", n(s.unknown_gov_count || 0), s.unknown_gov_count ? "bad" : "ok"],
     ["طلاب بدون ليفيل محدد", n(s.no_level || 0), s.no_level ? "bad" : "ok"],
