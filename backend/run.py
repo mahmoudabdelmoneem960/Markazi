@@ -16,6 +16,16 @@ for p in (str(BACKEND_DIR), str(ROOT_DIR)):
 from distributor import config, create_app
 
 
+def open_url(url):
+    try:
+        if hasattr(os, "startfile"):
+            os.startfile(url)
+        else:
+            webbrowser.open(url)
+    except Exception:
+        webbrowser.open(url)
+
+
 def free_port(start):
     for p in [start] + [x for x in range(5002, 5030) if x != start]:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -28,16 +38,22 @@ def free_port(start):
 
 
 def main():
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(line_buffering=True)
+        except Exception:
+            pass
+
     dev_mode = "--dev" in sys.argv or os.environ.get("SD_DEV", "").lower() in ("1", "true", "yes")
     app = create_app()
     port = free_port(config.PORT)
     if port != config.PORT:
-        print(f"!! بورت {config.PORT} مشغول (غالبًا نسخة قديمة من السيستم لسه شغالة). اقفلها لو مش محتاجها.")
+        print(f"!! بورت {config.PORT} مشغول (غالبًا نسخة قديمة من السيستم لسه شغالة). اقفلها لو مش محتاجها.", flush=True)
     url = f"http://{'127.0.0.1' if config.HOST in ('0.0.0.0', '') else config.HOST}:{port}"
     mode_tag = " [وضع التطوير والتحديث التلقائي Live-Reload]" if dev_mode else ""
-    print(f"Markazi (إصدار {config.VERSION}) شغال على {url}{mode_tag}")
+    print(f"Markazi (إصدار {config.VERSION}) شغال على {url}{mode_tag}", flush=True)
     if config.OPEN_BROWSER and not os.environ.get("WERKZEUG_RUN_MAIN"):
-        threading.Timer(1.2, lambda: webbrowser.open(url)).start()
+        threading.Timer(1.0, lambda: open_url(url)).start()
 
     if dev_mode:
         app.config["TEMPLATES_AUTO_RELOAD"] = True

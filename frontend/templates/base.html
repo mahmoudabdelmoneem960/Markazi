@@ -1,36 +1,82 @@
 <!doctype html>
-<html lang="ar" dir="rtl">
+<html lang="ar" dir="rtl" data-theme="light">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}Markazi{% endblock %} · Markazi</title>
+<!-- Google Fonts: Cairo & Plus Jakarta Sans -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 {% if use_map %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 {% endif %}
+<script>
+// Load saved theme immediately before body renders to avoid flash
+(function() {
+  const t = localStorage.getItem('markazi_theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  document.documentElement.setAttribute('data-theme', t);
+})();
+</script>
 <script src="{{ url_for('static', filename='js/common.js') }}"></script>
 {% if use_map %}<script src="{{ url_for('static', filename='js/map.js') }}"></script>{% endif %}
 </head>
 <body>
 {% if current_user.is_authenticated %}
 <header class="top"><div class="in">
+  <div class="brand-wrapper">
+    <div class="brand-logo">M</div>
+    <div class="brand-text">
+      <span class="brand-title">Markazi</span>
+      <span class="brand-subtitle">نظام توزيع الطلاب على المراكز v{{ VERSION }}</span>
+    </div>
+  </div>
+
   <nav class="menu">
-    <a href="/">التشغيلات</a>
-    <a href="/runs/new">تشغيل جديد</a>
-    <a href="/centers">المراكز</a>
-    <a href="/review">مراجعة المواقع</a>
-    <a href="/compare">مقارنة</a>
-    <a href="/settings">الإعدادات</a>
+    <a href="/" data-prefix="/runs/"><span class="menu-icon">📊</span> التشغيلات</a>
+    <a href="/runs/new"><span class="menu-icon">⚡</span> تشغيل جديد</a>
+    <a href="/centers"><span class="menu-icon">📍</span> المراكز</a>
+    <a href="/review"><span class="menu-icon">🎯</span> مراجعة المواقع</a>
+    <a href="/compare"><span class="menu-icon">⚖️</span> مقارنة</a>
+    <a href="/settings"><span class="menu-icon">⚙️</span> الإعدادات</a>
   </nav>
-  <div class="brand">Markazi <span class="mute" style="font-weight:400;font-size:13px">توزيع الطلاب على المراكز</span> <small>إصدار {{ VERSION }}</small>
-    <form method="post" action="/logout" style="display:inline"><button class="sec sm" type="submit">خروج</button></form></div>
+
+  <div class="header-actions">
+    <button type="button" class="theme-toggle-btn" id="themeToggle" title="تبديل الوضع الليلي / الفاتح" onclick="toggleTheme()">
+      🌙
+    </button>
+    <form method="post" action="/logout" style="margin:0;display:inline">
+      <button class="sec sm" type="submit" style="padding:7px 14px">خروج</button>
+    </form>
+  </div>
 </div></header>
 {% endif %}
+
 <main>
 {% block body %}{% endblock %}
 </main>
-<p class="hint" style="text-align:center">بيانات الخرائط: © OpenStreetMap contributors (ODbL)، وأماكن من GeoNames (CC BY 4.0).</p>
+
+<footer class="app-footer">
+  بيانات الخرائط: © OpenStreetMap contributors (ODbL) · أسماء الأماكن من GeoNames (CC BY 4.0) · مسافات الطرق عبر OSRM
+</footer>
+
+<script>
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme') || 'light';
+  const next = current === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem('markazi_theme', next);
+  const btn = document.getElementById('themeToggle');
+  if (btn) btn.textContent = next === 'dark' ? '☀️' : '🌙';
+}
+document.addEventListener('DOMContentLoaded', () => {
+  const current = document.documentElement.getAttribute('data-theme') || 'light';
+  const btn = document.getElementById('themeToggle');
+  if (btn) btn.textContent = current === 'dark' ? '☀️' : '🌙';
+});
+</script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

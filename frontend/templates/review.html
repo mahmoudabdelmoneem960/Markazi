@@ -1,28 +1,62 @@
-{% extends "base.html" %}{% block title %}مراجعة مواقع الطلاب{% endblock %}
+{% extends "base.html" %}
+{% block title %}مراجعة وتدقيق مواقع الطلاب{% endblock %}
+
 {% block body %}
-<h1>مراجعة مواقع الطلاب</h1>
-<p class="sub">مجموعات طلاب (حي/شارع داخل منطقة) موقعهم تقريبي لأن العنوان ما اتحددش بدقة. تصحيح واحد بيتطبق على كل طلاب المجموعة في التوزيع الجاي.</p>
-<div class="kpis" id="rk"></div>
-<div class="split" style="margin-top:14px">
-  <div class="card">
-    <div class="row">
-      <select id="rrun" class="inline" onchange="loadReview()" style="min-width:220px"></select>
-      <input type="text" id="rq" class="inline" placeholder="بحث (منطقة/حي/عنوان)" oninput="loadReview()" style="min-width:200px">
-      <label style="margin:0">أقل عدد <input type="number" id="rn" class="inline" value="3" min="1" style="width:70px" onchange="loadReview()"></label>
-      <button class="sec sm" onclick="more()">عرض أكتر</button>
-    </div>
-    <div class="scroll tall"><table id="rt"></table></div>
-    <h2 style="margin-top:16px">تصحيح طالب واحد</h2>
-    <div class="row"><input type="text" id="sn" class="inline" placeholder="الرقم القومي (14 رقم)" style="width:200px"><input type="text" id="si" class="inline" placeholder="إحداثيات أو لينك Google" style="min-width:220px"><button class="sm" onclick="saveStudent()">حفظ</button><span class="msg" id="smsg"></span></div>
+<div class="page-header">
+  <div class="page-title-area">
+    <h1>مراجعة وتدقيق مواقع الطلاب</h1>
+    <p class="sub">تدقيق مجموعات الطلاب ذات العناوين التقريبية بنقرة واحدة على الخريطة لتطبيقها في كافة التوزيعات اللاحقة.</p>
   </div>
-  <div class="card">
+</div>
+
+<div class="kpis" id="rk"></div>
+
+<div class="split" style="margin-top:20px">
+  <!-- Left Side: Table & Single Student Overrides -->
+  <div class="card" style="margin:0">
+    <div class="card-header-clean">
+      <div class="row" style="gap:10px;width:100%">
+        <select id="rrun" class="inline" onchange="loadReview()" style="flex:1" title="اختر التشغيل"></select>
+        <input type="text" id="rq" class="inline" placeholder="🔍 بحث (حي، منطقة، عنوان)..." oninput="loadReview()" style="flex:1">
+        <label style="margin:0;display:flex;align-items:center;gap:4px">
+          أقل عدد: <input type="number" id="rn" class="inline" value="3" min="1" style="width:60px" onchange="loadReview()">
+        </label>
+        <button type="button" class="btn sec sm" onclick="more()">عرض المزيد</button>
+      </div>
+    </div>
+
+    <div class="scroll tall"><table id="rt"></table></div>
+
+    <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--line)">
+      <h3 style="margin-top:0">🎯 تصحيح استثنائي لطالب واحد بالرقم القومي:</h3>
+      <div class="row" style="gap:8px">
+        <input type="text" id="sn" class="inline" placeholder="الرقم القومي (14 رقم)" style="width:190px">
+        <input type="text" id="si" class="inline" placeholder="الإحداثيات أو رابط خرائط جوجل" style="flex:1">
+        <button type="button" class="btn sm gradient" onclick="saveStudent()">حفظ الطالب</button>
+      </div>
+      <span class="msg" id="smsg" style="margin-top:4px"></span>
+    </div>
+  </div>
+
+  <!-- Right Side: Map & Location Pinning -->
+  <div class="card" style="margin:0">
     <div id="map" class="map"></div>
-    <div id="sel" class="hint">اختار مجموعة من الجدول: الدبوس الأزرق موقعها الحالي. اضغط على الخريطة في المكان الصح (أو اسحب الدبوس) ثم «حفظ».</div>
-    <div class="row" style="margin-top:8px"><input type="text" id="gi" class="inline" placeholder="lat, lon أو لينك Google" style="min-width:260px"><button class="sm" id="gsave" onclick="saveSel()" disabled>حفظ للمجموعة المختارة</button><button class="del sm" id="gdel" onclick="delSel()" hidden>إلغاء التصحيح</button><span class="msg" id="gm"></span></div>
+    <div id="sel" class="issue info" style="margin-top:12px">
+      <span>💡</span> <span>اختر مجموعة من الجدول، ثم انقر على الخريطة في المكان الدقيق واضغط «حفظ للمجموعة المختارة».</span>
+    </div>
+    <div class="row" style="margin-top:12px;gap:8px">
+      <input type="text" id="gi" class="inline" placeholder="الإحداثيات lat, lon أو رابط خرائط جوجل" style="flex:1">
+      <button type="button" class="btn sm gradient" id="gsave" onclick="saveSel()" disabled>حفظ للمجموعة</button>
+      <button type="button" class="btn del sm" id="gdel" onclick="delSel()" hidden>إلغاء التصحيح</button>
+      <span class="msg" id="gm"></span>
+    </div>
   </div>
 </div>
 {% endblock %}
+
 {% block scripts %}
-<script>const RUN_ID = {{ run_id|tojson }};</script>
+<script>
+  const RUN_ID = {{ run_id|tojson }};
+</script>
 <script src="{{ url_for('static', filename='js/review.js') }}"></script>
 {% endblock %}

@@ -1,13 +1,32 @@
-{% extends "base.html" %}{% block title %}تسجيل الدخول{% endblock %}
+{% extends "base.html" %}
+{% block title %}تسجيل الدخول · Markazi{% endblock %}
+
 {% block body %}
-<div class="card login">
-  <h1>Markazi</h1>
-  <p class="sub">سيستم توزيع الطلاب على المراكز — تسجيل الدخول</p>
-  {% if error %}<div class="alert">{{ error }}</div>{% endif %}
+<div class="card login fade-in" style="max-width:440px;margin:50px auto;padding:32px;box-shadow:var(--shadow-xl);border-radius:var(--radius-lg)">
+  <div style="text-align:center;margin-bottom:24px">
+    <div class="brand-logo" style="width:48px;height:48px;font-size:24px;margin:0 auto 12px">M</div>
+    <h1 style="font-size:24px;margin:0 0 6px">تسجيل الدخول</h1>
+    <p class="sub" style="margin:0">نظام توزيع الطلاب على المراكز (Markazi v4.5)</p>
+  </div>
+
+  {% if error %}
+  <div class="issue error" style="margin-bottom:16px">
+    <span>❌</span> <span>{{ error }}</span>
+  </div>
+  {% endif %}
+
   <form method="post">
-    <label>اسم المستخدم</label><input type="text" name="username" autofocus required>
-    <label style="margin-top:10px">كلمة السر</label><input type="password" name="password" required>
-    <div style="margin-top:14px"><button type="submit">دخول</button></div>
+    <div style="margin-bottom:14px">
+      <label for="username">اسم المستخدم:</label>
+      <input type="text" id="username" name="username" autofocus required placeholder="أدخل اسم المستخدم">
+    </div>
+    <div style="margin-bottom:20px">
+      <label for="password">كلمة المرور:</label>
+      <input type="password" id="password" name="password" required placeholder="أدخل كلمة المرور">
+    </div>
+    <button type="submit" class="btn lg gradient" style="width:100%">
+      <span>دخول إلى النظام</span> <span>←</span>
+    </button>
   </form>
 </div>
 {% endblock %}

@@ -85,8 +85,13 @@ def test_full_run_flow(client, sample_files):
     assert client.get(f"/api/runs/{run_b}").status_code == 404
 
 
-def test_centers_edit_and_review_overrides(client):
+def test_centers_edit_and_review_overrides(client, sample_files):
     cs = client.get("/api/centers").get_json()
+    if not cs:
+        _, C = sample_files
+        client.post("/api/centers/import", data={"file": (io.BytesIO(C), "centers_sample.csv")},
+                    content_type="multipart/form-data")
+        cs = client.get("/api/centers").get_json()
     assert len(cs) >= 12
     code = cs[0]["code"]
     r = client.post(f"/api/centers/{code}", json={"input": "30.0444, 31.2357"})

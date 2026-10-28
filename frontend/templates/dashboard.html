@@ -1,11 +1,36 @@
-{% extends "base.html" %}{% block title %}التشغيلات{% endblock %}
+{% extends "base.html" %}
+{% block title %}سجل التشغيلات والتوزيعات{% endblock %}
+
 {% block body %}
-<h1>التشغيلات</h1>
-<p class="sub">كل توزيع اتعمل محفوظ هنا بمدخلاته ونتايجه. <a class="btn" href="/runs/new" style="margin-right:10px">تشغيل جديد</a></p>
+<div class="page-header">
+  <div class="page-title-area">
+    <h1>سجل التشغيلات والتوزيعات</h1>
+    <p class="sub">الأرشيف الشامل لكافة عمليات التوزيع المنفذة بنتائجها ومخرجاتها الجغرافية.</p>
+  </div>
+  <div class="header-actions">
+    <a class="btn lg gradient pulse-glow" href="/runs/new">
+      <span>⚡</span> <span>بدء تشغيل جديد</span>
+    </a>
+  </div>
+</div>
+
+<!-- System Status KPIs -->
 <div class="kpis" id="kpis"></div>
-<div class="card" style="margin-top:16px">
-  <div class="row"><input type="text" id="q" class="inline" placeholder="بحث بالاسم" oninput="draw()" style="min-width:240px"></div>
-  <div class="scroll tall"><table id="t"></table></div>
+
+<!-- Runs Table Card -->
+<div class="card" style="margin-top:20px;padding:22px">
+  <div class="card-header-clean" style="margin-bottom:18px">
+    <h2><span>📋</span> قائمة التشغيلات السابقة</h2>
+    <div class="row" style="gap:10px">
+      <input type="text" id="q" class="inline" placeholder="🔍 بحث بالاسم أو اسم الملف..." oninput="draw()" style="min-width:260px">
+    </div>
+  </div>
+  <div class="scroll tall" style="border:1px solid var(--line);border-radius:var(--radius-md)">
+    <table id="t"></table>
+  </div>
 </div>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}
