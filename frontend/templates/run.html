@@ -276,7 +276,17 @@
         <button class="btn sm sec" id="btn_open_far_modal" onclick="openFarStudentsModal('gov')">📋 جدول الطلاب والمسافات</button>
         <span class="hint" id="m_msg" style="margin:0"></span>
       </div>
-      <div class="legend"><span><i style="background:#16794c"></i>مركز إشغاله أقل من 80%</span><span><i style="background:#e08a1e"></i>80–99%</span><span><i style="background:#b42318"></i>ممتلئ</span><span><i style="background:#16794c;width:8px;height:8px"></i>طالب موزع</span><span><i style="background:#d92d20;width:8px;height:8px"></i>طالب VP</span><span><i style="background:#e08a1e;width:10px;height:10px;border:1px solid #fff"></i>طالب &gt; 50 كم</span></div>
+      <div class="legend">
+        <span class="legend-title">🏢 المراكز (حجم الدائرة = السعة):</span>
+        <span><i class="c-dot" style="background:#16794c"></i> إشغال &lt; 80%</span>
+        <span><i class="c-dot" style="background:#e08a1e"></i> 80%–99%</span>
+        <span><i class="c-dot" style="background:#b42318"></i> ممتلئ (100%+)</span>
+        <span class="sep"></span>
+        <span class="legend-title">👤 الطلاب:</span>
+        <span><i class="s-dot" style="background:#16794c"></i> طالب مسكّن</span>
+        <span><i class="s-dot" style="background:#d92d20"></i> طالب VP</span>
+        <span><i class="s-dot" style="background:#e08a1e"></i> طالب &gt; 50 كم</span>
+      </div>
       <div id="map" class="map"></div>
       <div class="hint">اضغط على أي طالب أبعد من 50 كم لعرض أقرب مركز متاح، المسافة، وزر رسم الخط المباشر بينهما.</div>
     </div>
