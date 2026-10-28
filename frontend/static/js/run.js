@@ -1151,6 +1151,11 @@ async function viewStudentRow(runId, rowNo) {
   CURRENT_STUDENT_ROW = rowNo;
   $("#msi_title").textContent = `بيانات الطالب - صف رقم ${rowNo}`;
   $("#msi_body").innerHTML = '<div class="hint">جاري تحميل بيانات الطالب...</div>';
+  const saveBtn = $("#msi_save_btn");
+  if (saveBtn) {
+    saveBtn.disabled = false;
+    saveBtn.textContent = "تم التصحيح!";
+  }
   const m = $("#modal_student_inspect");
   if (m) {
     m.hidden = false;
@@ -1227,7 +1232,7 @@ async function saveStudentModal() {
   if (btn) { btn.disabled = true; btn.textContent = "جاري الحفظ..."; }
 
   const r = await postJSON(`/api/runs/${RUN.id}/students/by_row/${CURRENT_STUDENT_ROW}`, updates);
-  if (btn) { btn.disabled = false; btn.textContent = "حفظ التعديل"; }
+  if (btn) { btn.disabled = false; btn.textContent = "تم التصحيح!"; }
 
   if (!r.ok) { toast(r.j.error || "فشل حفظ تعديل الطالب", "bad"); return; }
   toast(`تم حفظ تعديل الطالب صف ${CURRENT_STUDENT_ROW} بنجاح ✓`, "ok");
