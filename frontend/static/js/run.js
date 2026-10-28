@@ -347,7 +347,7 @@ let SELECTED_BANDS = new Set(AVAILABLE_BANDS);
 let SELECTED_GOVS = new Set();
 let GOV_SEARCH_QUERY = "";
 
-// إغلاق القائمة المنسدلة لاختيار المحافظات عند النقر في أي مكان خارجها
+// إغلاق القائمة المنسدلة لاختيار المحافظات عند النقر في أي مكان خارجها، وإغلاق النوافذ المنبثقة
 document.addEventListener("click", (e) => {
   const dd = $("#gov_multiselect_dropdown");
   const btn = $("#btn_open_gov_picker");
@@ -355,6 +355,9 @@ document.addEventListener("click", (e) => {
     if (!dd.contains(e.target) && !btn?.contains(e.target)) {
       closeGovDropdown();
     }
+  }
+  if (e.target && e.target.classList && e.target.classList.contains("modal-overlay")) {
+    e.target.hidden = true;
   }
 });
 
