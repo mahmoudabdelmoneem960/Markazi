@@ -92,7 +92,7 @@
 
       <!-- لوحة التصفية المتعددة: فلترة بالبند وبأكثر من محافظة في نفس الوقت -->
       <div class="gov-filter-panel" id="gov_filter_panel">
-        <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:10px">
+        <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
           
           <!-- 1. فلتر البنود المتعدد (Multi-Band Filter) -->
           <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
@@ -107,7 +107,7 @@
               <button type="button" class="btn sm sec" id="gbf_b3" onclick="toggleBandSelection('البند الثالث')" style="padding:4px 10px;font-size:12px">
                 <span id="gbf_chk_b3">✓</span> البند الثالث (<span id="gbf_cnt_b3">0</span>)
               </button>
-              <button type="button" class="btn sm sec bad" id="gbf_b2" onclick="toggleBandSelection('البند الثاني')" style="padding:4px 10px;font-size:12px">
+              <button type="button" class="btn sm sec bad" id="gbf_b2" onclick="toggleBandSelection('البند الثاني')" style="padding:4px 10px;font-size:12px;display:none">
                 <span id="gbf_chk_b2">✓</span> ⚠️ البند الثاني (<span id="gbf_cnt_b2">0</span>)
               </button>
             </div>
@@ -149,18 +149,6 @@
                 <button type="button" class="btn sm ok" onclick="closeGovDropdown()">تطبيق الفلتر ✓</button>
               </div>
             </div>
-          </div>
-        </div>
-
-        <!-- 3. شريط الفلاتر المطبقة حالياً وإحصائيات النتائج -->
-        <div id="active_filters_row" class="row" style="justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding-top:8px;margin-top:6px;flex-wrap:wrap;gap:8px">
-          <div class="row" style="gap:6px;align-items:center;flex-wrap:wrap">
-            <span class="small mute" style="font-weight:600">الفلاتر المطبقة:</span>
-            <div id="active_filter_tags" class="row" style="gap:4px;flex-wrap:wrap"></div>
-            <button type="button" class="btn sm sec" id="btn_clear_all_filters" onclick="clearAllGovFilters()" style="padding:2px 8px;font-size:11.5px;display:none">مسح كل الفلاتر ✕</button>
-          </div>
-          <div id="gov_filtered_kpis_summary" class="small mute" style="font-weight:600">
-            <!-- ملخص إجمالي الطلاب والموزعين للمحافظات المفلترة -->
           </div>
         </div>
       </div>
