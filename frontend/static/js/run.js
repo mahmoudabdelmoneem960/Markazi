@@ -635,6 +635,20 @@ function applyCombinedGovFilter() {
   if (counter) {
     counter.textContent = `تم تحديد ${SELECTED_GOVS.size} من ${ALL_SORTED_GOVS.length} محافظة`;
   }
+
+  // دعم رجعي في حال وجود sel_gov في نسخة كاش قديمة بالمتصفح
+  const selGov = $("#sel_gov");
+  if (selGov) {
+    let opts = `<option value="">-- كل المحافظات المفلترة (${filtered.length}) --</option>`;
+    filtered.forEach(g => {
+      const code = normGov(g.gov);
+      const name = govAr(g.gov);
+      const b = g.band || g["البند"] || getGovBand(g.gov);
+      opts += `<option value="${esc(code)}">${b === "البند الثاني" ? "⚠️ " : ""}${esc(name)} [${b}] (${n(g.students)} طالب)</option>`;
+    });
+    selGov.innerHTML = opts;
+    selGov.value = CURRENT_SELECTED_GOV || "";
+  }
 }
 
 function renderGovTableRows(govsList) {

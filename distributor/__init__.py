@@ -16,6 +16,8 @@ def create_app():
     templates_dir = getattr(config, "TEMPLATES_DIR", config.BASE_DIR / "frontend" / "templates")
     static_dir = getattr(config, "STATIC_DIR", config.BASE_DIR / "frontend" / "static")
     app = Flask(__name__, template_folder=str(templates_dir), static_folder=str(static_dir))
+    app.config["TEMPLATES_AUTO_RELOAD"] = True
+    app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
     app.config["MAX_CONTENT_LENGTH"] = config.MAX_UPLOAD_MB * 1024 * 1024
     app.config["SECRET_KEY"] = config.secret_key()
     app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
