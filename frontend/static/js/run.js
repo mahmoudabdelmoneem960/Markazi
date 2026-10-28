@@ -176,9 +176,9 @@ function render(r) {
   `;
 
   $("#kpis").innerHTML =
-    k(`${n(s.assigned)} <small style="font-size:12px;color:var(--ok)">(${assignedRatio}%)</small>`, "الطلاب المسكنين بنجاح", "ok", "kpi-ok") +
     k(n(s.students), "إجمالي عدد الطلاب", "", "kpi-brand") +
     k(govKpiValue, "عدد المحافظات في كل بند", b2GovCount > 0 ? "bad" : "", b2GovCount > 0 ? "kpi-bad" : "kpi-brand") +
+    k(`${n(s.assigned)} <small style="font-size:12px;color:var(--ok)">(${assignedRatio}%)</small>`, "الطلاب المسكنين بنجاح", "ok", "kpi-ok") +
     k(n(s.vp), "قيد الانتظار (VP)", "bad", "kpi-bad") +
     k(n(s.same_area), "في نفس منطقتهم السكنية", "", "kpi-ok") +
     k((s.avg_km || "0") + " كم", "متوسط مسافة الطريق", "brand", "kpi-brand") +
