@@ -1151,7 +1151,11 @@ async function viewStudentRow(runId, rowNo) {
   CURRENT_STUDENT_ROW = rowNo;
   $("#msi_title").textContent = `بيانات الطالب - صف رقم ${rowNo}`;
   $("#msi_body").innerHTML = '<div class="hint">جاري تحميل بيانات الطالب...</div>';
-  $("#modal_student_inspect").hidden = false;
+  const m = $("#modal_student_inspect");
+  if (m) {
+    m.hidden = false;
+    m.style.zIndex = "100050";
+  }
 
   const res = await api(`/api/runs/${encodeURIComponent(runId)}/students/by_row/${encodeURIComponent(rowNo)}`);
   if (!res.ok) {
@@ -1219,10 +1223,27 @@ async function saveStudentModal() {
   if (lat) { updates["lat"] = lat; updates["Latitude"] = lat; }
   if (lon) { updates["lon"] = lon; updates["Longitude"] = lon; }
 
+  const btn = $("#msi_save_btn");
+  if (btn) { btn.disabled = true; btn.textContent = "جاري الحفظ..."; }
+
   const r = await postJSON(`/api/runs/${RUN.id}/students/by_row/${CURRENT_STUDENT_ROW}`, updates);
+  if (btn) { btn.disabled = false; btn.textContent = "حفظ التعديل"; }
+
   if (!r.ok) { toast(r.j.error || "فشل حفظ تعديل الطالب", "bad"); return; }
   toast(`تم حفظ تعديل الطالب صف ${CURRENT_STUDENT_ROW} بنجاح ✓`, "ok");
   closeModal('modal_student_inspect');
+
+  // تحديث جدول الطلاب بأرقام قومية غير صحيحة تلقائياً إن كان مفتوحاً
+  const minModal = $("#modal_invalid_nids");
+  if (minModal && !minModal.hidden) {
+    openInvalidNidsModal(1, $("#min_search")?.value || "");
+  }
+  // تحديث جدول طلاب البند الثاني إن كان مفتوحاً
+  const mb2Modal = $("#modal_band2_students");
+  if (mb2Modal && !mb2Modal.hidden) {
+    openBand2Modal(1, $("#mb2_search")?.value || "");
+  }
+
   await loadResult();
 }
 

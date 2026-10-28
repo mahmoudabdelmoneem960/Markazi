@@ -310,7 +310,7 @@
 </div>
 
 <!-- Modal: فحص وتعديل بيانات الطالب الفردي -->
-<div id="modal_student_inspect" class="modal-overlay" hidden>
+<div id="modal_student_inspect" class="modal-overlay" style="z-index:100050" hidden>
   <div class="modal-box">
     <div class="modal-header">
       <h3 id="msi_title">بيانات الطالب</h3>
@@ -318,7 +318,7 @@
     </div>
     <div class="modal-body" id="msi_body"></div>
     <div class="modal-footer">
-      <button class="ok" id="msi_save_btn" onclick="saveStudentModal()">حفظ التعديلات</button>
+      <button class="btn ok" id="msi_save_btn" onclick="saveStudentModal()">حفظ التعديل</button>
       <button class="sec" onclick="closeModal('modal_student_inspect')">إغلاق</button>
     </div>
   </div>

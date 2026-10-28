@@ -1073,6 +1073,10 @@ tr.row-bad:hover td {
   animation: fadeIn 0.2s ease;
 }
 
+#modal_student_inspect {
+  z-index: 100050 !important;
+}
+
 .modal-overlay[hidden] {
   display: none !important;
 }
