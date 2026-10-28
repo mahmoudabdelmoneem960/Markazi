@@ -115,3 +115,45 @@ def test_password_change(client):
     assert client.post("/api/password", json={"old": "wrong", "new": "Another123"}).status_code == 400
     assert client.post("/api/password", json={"old": "Test12345", "new": "Another123"}).status_code == 200
     assert client.post("/api/password", json={"old": "Another123", "new": "Test12345"}).status_code == 200
+
+
+def test_center_suggestion_and_resolution(client):
+    from distributor import db
+    con = db.connect()
+    try:
+        con.execute("INSERT OR REPLACE INTO centers(code, name, gov, area, address, lat, lon) VALUES ('TST_01', 'Test Center', 'cairo', 'heliopolis', 'شارع التحرير', 30.05, 31.25)")
+        con.commit()
+    finally:
+        con.close()
+    
+    code = "TST_01"
+    # Suggest coords
+    r = client.get(f"/api/centers/{code}/suggest_coords")
+    assert r.status_code == 200 and "center" in r.get_json()
+    # Verify current
+    r = client.post(f"/api/centers/{code}/verify_current")
+    assert r.status_code == 200 and r.get_json()["ok"]
+    # Apply coords
+    r = client.post(f"/api/centers/{code}/apply_coords", json={"lat": 30.12345, "lon": 31.54321, "source": "manual", "clear_flags": True})
+    assert r.status_code == 200 and r.get_json()["ok"]
+    assert r.get_json()["lat"] == 30.12345
+
+
+def test_far_students_endpoints(client):
+    from distributor.services import runs
+    # Check if any run exists or create dummy run folder
+    active_runs = runs.list_runs()
+    if active_runs:
+        rid = active_runs[0]["id"]
+        r = client.get(f"/api/runs/{rid}/students/far?filter_type=gov")
+        assert r.status_code == 200
+        data = r.get_json()
+        assert "rows" in data and "total" in data
+
+        r_pts = client.get(f"/api/runs/{rid}/students/far_points?filter_type=gov")
+        assert r_pts.status_code == 200
+        pts_data = r_pts.get_json()
+        assert "points" in pts_data and "centers" in pts_data
+
+
+

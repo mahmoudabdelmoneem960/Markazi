@@ -114,9 +114,19 @@ def parse_coords(text, strict=False):
         return None
     t = urllib.parse.unquote(str(text).strip()).translate(gn._DIGITS).replace("٫", ".").replace("،", ",")
     pairs = []
-    m = re.search(r"!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)", t)
-    if m:
-        pairs.append((float(m.group(1)), float(m.group(2))))
+    # فحص درجات ودقائق وثواني (DMS) مثل: 25°29'41.6"N 28°58'57.9"E
+    dms = re.findall(r"(\d+)[°\s]+(\d+)['\s]+(\d+(?:\.\d+)?)\"?\s*([NSEWnsew])", t)
+    if len(dms) == 2:
+        def _dms_conv(d, m, s, hemi):
+            v = float(d) + float(m) / 60.0 + float(s) / 3600.0
+            return -v if hemi.upper() in ("S", "W") else v
+        c1 = _dms_conv(*dms[0])
+        c2 = _dms_conv(*dms[1])
+        pairs.append((c1, c2) if dms[0][3].upper() in ("N", "S") else (c2, c1))
+    if not pairs:
+        m = re.search(r"!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)", t)
+        if m:
+            pairs.append((float(m.group(1)), float(m.group(2))))
     if not pairs:
         m = re.search(r"[?&](?:q|ll|query|destination" + ("" if strict else "|center") + r")=(-?\d+\.\d+)[, ]\s*(-?\d+\.\d+)", t)
         if m:
@@ -154,25 +164,34 @@ def place_name_from_url(url):
 
 
 def resolve_gmaps_ex(url, tries=3):
-    """لينك Google Maps (طويل أو مختصر maps.app.goo.gl) -> (lat, lon, اسم المكان) أو None.
-    بنقرا اللينك بعد التحويل بس (دبوس المكان !3d!4d أو مركز خريطة بزووم قريب). لو اللينك راجع صفحة بحث أو مكان من غير
-    إحداثيات بنرجّع None ومش بنخمّن (مركز الخريطة الافتراضي في الصفحة بيبقى بعيد مئات الكيلومترات).
-    بيشتغل ببطء ومؤدب (جوجل بيحظر لو الطلبات كتير)."""
+    """لينك Google Maps (طويل أو مختصر maps.app.goo.gl) -> (lat, lon, اسم المكان) أو None."""
     if not url or not str(url).startswith("http"):
         return None
-    got = parse_coords(url, strict=True)
+    got = parse_coords(url, strict=False)
     if got:
         return got[0], got[1], place_name_from_url(url)
     for attempt in range(tries):
         try:
-            r = urllib.request.urlopen(urllib.request.Request(url, headers=_GM_HEADERS), timeout=25)
+            r = urllib.request.urlopen(urllib.request.Request(url, headers=_GM_HEADERS), timeout=15)
             final = r.geturl()
-            g = parse_coords(final, strict=True)
-            return (g[0], g[1], place_name_from_url(final)) if g else None
+            g = parse_coords(final, strict=False)
+            if g:
+                return g[0], g[1], place_name_from_url(final)
+            html = r.read().decode("utf-8", errors="ignore")
+            m = re.search(r"!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)", html)
+            if not m:
+                m = re.search(r"@(-?\d+\.\d+),(-?\d+\.\d+)", html)
+            if m:
+                g = parse_coords(m.group(0), strict=False)
+                if g:
+                    return g[0], g[1], place_name_from_url(final)
+            return None
         except urllib.error.HTTPError as e:
-            time.sleep(4 * (attempt + 1) if e.code == 429 else 2)
-        except Exception:  # noqa
-            time.sleep(2)
+            if e.code == 404:
+                return None
+            time.sleep(2 * (attempt + 1) if e.code == 429 else 1)
+        except Exception:
+            time.sleep(1)
     return None
 
 

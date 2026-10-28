@@ -151,11 +151,86 @@ def run_centers(run_id):
     return jsonify(runs.centers_geo(run_id))
 
 
+@bp.route("/runs/<run_id>/center_details/<code>")
+def run_center_details(run_id, code):
+    try:
+        return jsonify(runs.get_center_run_details(run_id, code))
+    except ValueError as e:
+        return jsonify(error=str(e)), 404
+
+
 @bp.route("/runs/<run_id>/students")
 def run_students(run_id):
     a = request.args
     return jsonify(runs.students_points(run_id, center=a.get("center"), gov=a.get("gov"), status=a.get("status"),
                                         level=a.get("level"), limit=int(a.get("limit") or 6000)))
+
+
+@bp.route("/runs/<run_id>/students/invalid_nids")
+def run_invalid_nids(run_id):
+    p = int(request.args.get("page") or 1)
+    pp = int(request.args.get("per_page") or 50)
+    q = request.args.get("q", "")
+    try:
+        return jsonify(runs.get_invalid_nids(run_id, page=p, per_page=pp, search=q))
+    except ValueError as e:
+        return jsonify(error=str(e)), 404
+
+
+@bp.route("/runs/<run_id>/students/by_row/<row_no>", methods=["GET", "POST"])
+def run_student_by_row(run_id, row_no):
+    if request.method == "POST":
+        d = _json() or {}
+        try:
+            return jsonify(runs.update_student(run_id, row_no, updates=d, user=_user()))
+        except (KeyError, ValueError) as e:
+            return jsonify(error=str(e)), 400
+    try:
+        return jsonify(runs.get_student_row(run_id, row_no))
+    except (KeyError, ValueError) as e:
+        return jsonify(error=str(e)), 404
+
+
+@bp.route("/runs/<run_id>/students/suspects")
+def run_suspect_students(run_id):
+    p = int(request.args.get("page") or 1)
+    pp = int(request.args.get("per_page") or 50)
+    try:
+        return jsonify(runs.get_suspect_students(run_id, page=p, per_page=pp))
+    except ValueError as e:
+        return jsonify(error=str(e)), 404
+
+
+@bp.route("/runs/<run_id>/students/fix_suspects", methods=["POST"])
+def run_fix_suspects(run_id):
+    d = _json() or {}
+    save_ov = d.get("save_overrides", True)
+    try:
+        return jsonify(runs.smart_fix_suspects(run_id, save_overrides=save_ov, user=_user()))
+    except ValueError as e:
+        return jsonify(error=str(e)), 400
+
+
+@bp.route("/runs/<run_id>/students/far")
+def run_far_students(run_id):
+    p = int(request.args.get("page") or 1)
+    pp = int(request.args.get("per_page") or 50)
+    q = request.args.get("q", "")
+    ft = request.args.get("filter_type", "all")
+    try:
+        return jsonify(runs.get_far_students(run_id, page=p, per_page=pp, search=q, filter_type=ft))
+    except ValueError as e:
+        return jsonify(error=str(e)), 404
+
+
+@bp.route("/runs/<run_id>/students/far_points")
+def run_far_students_points(run_id):
+    ft = request.args.get("filter_type", "all")
+    limit = int(request.args.get("limit") or 3000)
+    try:
+        return jsonify(runs.get_far_students_points(run_id, filter_type=ft, limit=limit))
+    except ValueError as e:
+        return jsonify(error=str(e)), 404
 
 
 @bp.route("/runs/<run_id>/whatif", methods=["POST"])
@@ -196,10 +271,52 @@ def centers_list():
 @bp.route("/centers/<code>", methods=["POST"])
 def center_set(code):
     d = _json() or {}
+    run_id = d.get("run_id") or request.args.get("run_id") or ""
     try:
-        return jsonify(centers.set_center(code, d.get("input", ""), note=d.get("note"), user=_user()))
+        return jsonify(centers.set_center(code, d.get("input", ""), note=d.get("note"), user=_user(), run_id=run_id))
     except (ValueError, KeyError) as e:
         return jsonify(error=str(e) if not isinstance(e, KeyError) else "المركز مش موجود"), 400
+
+
+@bp.route("/centers/<code>/suggest_coords")
+def center_suggest_coords(code):
+    try:
+        return jsonify(centers.suggest_center_coords(code))
+    except KeyError:
+        return jsonify(error="المركز مش موجود"), 404
+    except Exception as e:
+        return jsonify(error=str(e)), 400
+
+
+@bp.route("/centers/<code>/apply_coords", methods=["POST"])
+def center_apply_coords(code):
+    d = _json() or {}
+    run_id = d.get("run_id") or request.args.get("run_id") or ""
+    try:
+        return jsonify(centers.apply_center_coords(
+            code,
+            lat=d.get("lat"),
+            lon=d.get("lon"),
+            source=d.get("source", "manual"),
+            note=d.get("note", ""),
+            clear_flags=d.get("clear_flags", True),
+            user=_user(),
+            run_id=run_id
+        ))
+    except (ValueError, KeyError) as e:
+        return jsonify(error=str(e)), 400
+
+
+@bp.route("/centers/<code>/verify_current", methods=["POST"])
+def center_verify_current(code):
+    d = _json() or {}
+    run_id = d.get("run_id") or request.args.get("run_id") or ""
+    try:
+        return jsonify(centers.verify_center_current(code, user=_user(), run_id=run_id))
+    except KeyError:
+        return jsonify(error="المركز مش موجود"), 404
+    except Exception as e:
+        return jsonify(error=str(e)), 400
 
 
 @bp.route("/centers/import", methods=["POST"])

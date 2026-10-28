@@ -1,0 +1,11 @@
+{
+  "include": [
+    ".",
+    "distributor",
+    "tools",
+    "tests"
+  ],
+  "extraPaths": [
+    "."
+  ]
+}

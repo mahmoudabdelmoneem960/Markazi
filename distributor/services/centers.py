@@ -28,12 +28,20 @@ def list_centers():
         con.close()
 
 
-def set_center(code, text, note=None, user=""):
+def set_center(code, text, note=None, user="", run_id=""):
     con = db.connect()
     try:
         lat, lon, n = parse_input(text)
         flags = locdb.center_set(con, code, lat, lon, note=(note or n))
+        row = con.execute("SELECT flags FROM centers WHERE code=?", (code,)).fetchone()
+        if row and row["flags"]:
+            parts = [p.strip() for p in row["flags"].split("|") if "بعيد" not in p and "كم عن موقع عنوانه" not in p]
+            new_fl = " | ".join(parts) if parts else None
+            con.execute("UPDATE centers SET flags=? WHERE code=?", (new_fl, code))
+            con.commit()
+            flags = parts
         db.audit(con, user, "center_set", code, {"lat": lat, "lon": lon, "note": note or n})
+        _clean_center_from_run(run_id, code)
         return {"ok": True, "lat": lat, "lon": lon, "flags": flags}
     finally:
         con.close()
@@ -164,3 +172,127 @@ def start_google(scope, user=""):
         finally:
             con.close()
     return jobs.submit("google_verify", _job), info
+
+
+# ---------------- اقتراح وتصحيح موقع المركز المشكوك فيه ----------------
+def suggest_center_coords(code):
+    """جلب إحداثيات مقترحة للمركز (من اللينك ومن الـ Geocoder مقابل العنوان) مع مقارنتها بالموقع الحالي."""
+    con = db.connect()
+    try:
+        r = con.execute("SELECT * FROM centers WHERE code=?", (code,)).fetchone()
+        if not r:
+            raise KeyError(code)
+        c = dict(r)
+
+        link_info = None
+        if c.get("gmaps_url"):
+            link_lat, link_lon = c.get("link_lat"), c.get("link_lon")
+            if link_lat is None or link_lon is None:
+                resolved = locdb.resolve_gmaps(c["gmaps_url"])
+                if resolved:
+                    link_lat, link_lon = resolved[0], resolved[1]
+                    con.execute("UPDATE centers SET link_lat=?, link_lon=? WHERE code=?", (link_lat, link_lon, code))
+                    con.commit()
+            if link_lat is not None and link_lon is not None:
+                gap_km = round(locdb.km(c["lat"], c["lon"], link_lat, link_lon), 1) if c.get("lat") is not None else None
+                link_info = {
+                    "url": c["gmaps_url"],
+                    "lat": link_lat,
+                    "lon": link_lon,
+                    "diff_km": gap_km
+                }
+
+        addr_info = None
+        gaz = locdb.find_gazetteer()
+        if gaz and c.get("address") and c.get("gov"):
+            try:
+                from distributor.core import geocoder as gc
+                gz = gc.Geocoder(gaz)
+                res = gz.geocode(c["gov"], c.get("area") or "", c["address"], exclude_center=code)
+                if res and res.get("lat") is not None:
+                    gap_km = round(locdb.km(c["lat"], c["lon"], res["lat"], res["lon"]), 1) if c.get("lat") is not None else None
+                    addr_info = {
+                        "lat": res["lat"],
+                        "lon": res["lon"],
+                        "level": res.get("level"),
+                        "matched": res.get("matched"),
+                        "diff_km": gap_km
+                    }
+            except Exception:
+                pass
+
+        return {
+            "center": c,
+            "link": link_info,
+            "address": addr_info,
+        }
+    finally:
+        con.close()
+
+
+def _clean_center_from_run(run_id, code):
+    """إزالة المركز من تحذيرات وتنبيهات التشغيلة المعروضة في الملخص."""
+    if not run_id:
+        return
+    try:
+        from distributor.services import runs
+        d = runs.run_dir(run_id)
+        p = d / runs.FILES["result"]
+        if p.exists():
+            import json
+            data = json.loads(p.read_text(encoding="utf-8"))
+            s = data.get("summary", {})
+            if "alerts" in s:
+                s["alerts"] = [a for a in s["alerts"] if code not in a]
+            if "warnings" in s:
+                s["warnings"] = [w for w in s["warnings"] if code not in w]
+            ag = s.get("geo", {}).get("centers", {}).get("address_gap")
+            if ag:
+                s["geo"]["centers"]["address_gap"] = [x for x in ag if x.get("code") != code]
+            if "sus_centers" in data:
+                data["sus_centers"] = [x for x in data["sus_centers"] if x.get("center_code") != code]
+            p.write_text(json.dumps(data, ensure_ascii=False, default=str), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def apply_center_coords(code, lat, lon, source="manual", note="", clear_flags=True, user="", run_id=""):
+    """تطبيق إحداثيات جديدة للمركز وتأكيده مع إزالة علامة الشك والمسافة وتحديث نتيجة التشغيلة إن وجدت."""
+    con = db.connect()
+    try:
+        fl = locdb.center_set(con, code, float(lat), float(lon), note=note, source=source)
+        if clear_flags:
+            row = con.execute("SELECT flags FROM centers WHERE code=?", (code,)).fetchone()
+            if row and row["flags"]:
+                parts = [p.strip() for p in row["flags"].split("|") if "بعيد" not in p and "كم عن موقع عنوانه" not in p]
+                new_fl = " | ".join(parts) if parts else None
+                con.execute("UPDATE centers SET flags=? WHERE code=?", (new_fl, code))
+                con.commit()
+                fl = parts
+        db.audit(con, user, "center_apply_coords", code, {"lat": lat, "lon": lon, "source": source, "note": note})
+        _clean_center_from_run(run_id, code)
+        return {"ok": True, "lat": lat, "lon": lon, "flags": fl}
+    finally:
+        con.close()
+
+
+def verify_center_current(code, user="", run_id=""):
+    """تأكيد أن موقع المركز الحالي صحيح وإزالة علامة الشك والمسافة عنه وتحديث نتيجة التشغيلة."""
+    con = db.connect()
+    try:
+        row = con.execute("SELECT lat, lon, flags FROM centers WHERE code=?", (code,)).fetchone()
+        if not row:
+            raise KeyError(code)
+        parts = []
+        if row["flags"]:
+            parts = [p.strip() for p in row["flags"].split("|") if "بعيد" not in p and "كم عن موقع عنوانه" not in p]
+        new_fl = " | ".join(parts) if parts else None
+        con.execute("UPDATE centers SET verified=1, flags=? WHERE code=?", (new_fl, code))
+        con.commit()
+        db.audit(con, user, "center_verify_current", code, {"flags": new_fl})
+        _clean_center_from_run(run_id, code)
+        return {"ok": True, "flags": new_fl}
+    finally:
+        con.close()
+
+

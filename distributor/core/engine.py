@@ -691,6 +691,7 @@ def distribute(S, C, max_km=MAX_KM, progress=lambda p, m: None, road_mode="facto
     seats_g = load.assign(gov_l=load["gov"].str.lower()).groupby(["gov_l", "level_code"]).capacity.sum()
     dem = out.groupby(["gov_code", "level_code"]).size()
     dem_vp = out[out._vp].groupby(["gov_code", "level_code"]).size()
+    dem_ass = out[~out._vp].groupby(["gov_code", "level_code"]).size()
     # سعة الجروب الجديد = السعة الأكثر تكرارًا في الشيت لنفس الليفيل/التراك (وإلا الأكثر تكرارًا عمومًا)
     pos = load[load.capacity > 0].capacity
     overall_cap = int(pos.mode().iloc[0]) if len(pos) else 20
@@ -699,15 +700,18 @@ def distribute(S, C, max_km=MAX_KM, progress=lambda p, m: None, road_mode="facto
     for (g, k), cnt in dem.items():
         seats = int(seats_g.get((g, k), 0))
         vp_n = int(dem_vp.get((g, k), 0))
+        ass_n = int(dem_ass.get((g, k), 0))
         deficit = max(0, cnt - seats)
         gcap = cap_by_key.get(k, overall_cap)
-        rows.append({"gov": g, "level_code": k, "students": int(cnt), "seats_in_gov": seats, "vp": vp_n,
-                     "deficit": deficit, "group_capacity": gcap,
-                     "extra_groups_needed": math.ceil(deficit / gcap)})
-    deficit_df = pd.DataFrame(rows, columns=["gov", "level_code", "students", "seats_in_gov", "vp", "deficit",
-                                             "group_capacity", "extra_groups_needed"])
+        rows.append({"gov": g, "level_code": k, "students": int(cnt), "assigned": ass_n,
+                     "seats_in_gov": seats, "seats": seats, "vp": vp_n,
+                     "deficit": deficit, "vp_%": round(100.0 * vp_n / cnt, 1) if cnt else 0.0,
+                     "group_capacity": gcap, "extra_groups_needed": math.ceil(deficit / gcap)})
+    by_gov_level = pd.DataFrame(rows).sort_values(["gov", "level_code"])
+    deficit_df = pd.DataFrame([r for r in rows if r["deficit"] > 0 or r["vp"] > 0],
+                              columns=["gov", "level_code", "students", "seats_in_gov", "vp", "deficit",
+                                       "group_capacity", "extra_groups_needed"])
     deficit_df = deficit_df.sort_values(["deficit", "vp"], ascending=False)
-    deficit_df = deficit_df[(deficit_df.deficit > 0) | (deficit_df.vp > 0)]
 
     vp_area = (out[out._vp].groupby([gov_col, area_col, "level_code"]).size().rename("vp_students")
                .reset_index().sort_values("vp_students", ascending=False))
@@ -728,9 +732,19 @@ def distribute(S, C, max_km=MAX_KM, progress=lambda p, m: None, road_mode="facto
         "wkt": [f"LINESTRING({lon_a[i]} {lat_a[i]}, {c_lon_a[j]} {c_lat_a[j]})" for i, j in zip(a_idx, a_j)],
     })
 
-    out = out.drop(columns=["_vp"])
-    vp_reasons = Counter(re.sub(r"\s*\([A-Za-z]+_C\d+\)", "", re.sub(r"[\d.]+ كم", "X كم", r))
-                         for r in out.loc[out.status == "VP", "note"])
+    def _clean_vp_reason(note):
+        s = str(note or "").strip()
+        if not s:
+            return ""
+        if "أبعد من" in s:
+            if "غالبًا إحداثيات الطالب غلط" in s or "مشكوك" in s:
+                return f"أبعد من الحد الأقصى ({max_km:g} كم) عن أي مركز - غالبًا إحداثيات الطالب غير دقيقة"
+            return f"أبعد من الحد الأقصى للمسافة ({max_km:g} كم) عن أقرب مركز متاح في محافظته"
+        if "ممتلئة" in s:
+            return f"كل مراكز المحافظة داخل الحد الأقصى ({max_km:g} كم) ممتلئة بالكامل - مقترح VP"
+        return re.sub(r"\s*\([A-Za-z0-9_]+\)", "", s)
+
+    vp_reasons = Counter(_clean_vp_reason(r) for r in out.loc[out.status == "VP", "note"] if r)
     if fallback_cnt:
         warnings.append(f"{fallback_cnt} طالب مسافتهم اتقدّرت (x{detour}) لأن OSRM فشل في {failed_chunks} طلب "
                         "أو مالقاش طريق ليهم.")
@@ -749,7 +763,7 @@ def distribute(S, C, max_km=MAX_KM, progress=lambda p, m: None, road_mode="facto
     progress(92, "حفظ الملفات")
     return {
         "summary": summary, "students": out, "load": load, "by_gov": by_gov, "by_level": by_level,
-        "deficit": deficit_df, "vp_area": vp_area, "center_load": center_load,
+        "by_gov_level": by_gov_level, "deficit": deficit_df, "vp_area": vp_area, "center_load": center_load,
         "sus_centers": sus_centers, "sus_students": sus_students,
         "points": pts, "lines": lines_df,
         "centers_pts": centers[["Center Code", "Center Name", "City", "Area", "lat", "lon"]]

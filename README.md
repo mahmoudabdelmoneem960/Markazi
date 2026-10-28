@@ -4,12 +4,11 @@
 
 ## التشغيل
 1. (مرة واحدة) حط `gazetteer.sqlite` في `data\` (شوف `tools/README.md` لبنائها)، ولو عايز مسافات الطرق الفعلية جهّز OSRM (قسم "OSRM" تحت).
-2. دوس دوبل كليك على `run.bat` (بيعمل venv ويسطّب المكتبات أول مرة، وبعدين يفتح المتصفح). أو:
-   ```
-   py -3.12 -m venv .venv
-   .venv\Scripts\pip install -r requirements.txt
-   .venv\Scripts\python run.py
-   ```
+2. **طرق التشغيل:**
+   - **زر التشغيل في الـ IDE (Run Button ▶):** اضغط على علامة التبويب **Run and Debug** في الشريط الجانبي (`Ctrl+Shift+D`) ثم اضغط على زر **Play (▶)**، أو اختاره من القائمة العلوية.
+   - **وضع المطور والتحديث التلقائي (Live Reload):** دوس دوبل كليك على `run_dev.bat` (أي تعديل تعمله في قوالب الـ HTML أو كود البايثون هيظهر فوراً بدون إعادة تشغيل).
+   - **التشغيل العادي:** دوس دوبل كليك على `run.bat`.
+   - **من الـ Terminal:** `python run.py --dev` (تطوير) أو `python run.py` (عادي).
 3. أول مرة: صفحة إنشاء حساب الأدمن (اسم مستخدم وكلمة سر). بعدها تسجيل دخول عادي.
 4. **تشغيل جديد** ← ارفع شيت الطلاب وشيت المراكز ← راجع الفحص المسبق ← ابدأ التوزيع.
 
@@ -74,16 +73,21 @@
 
 ## هيكل الكود
 ```
-run.py / run.bat            تشغيل
-distributor/
-  config.py                 المسارات والإعدادات (.env)
-  __init__.py               create_app + حارس الطلبات + تسجيل الدخول
-  auth.py  db.py  jobs.py   المستخدمين / جداول التطبيق / مهام الخلفية
-  core/                     engine (التوزيع) · geoprep (تجهيز المواقع) · geocoder+geonorm (العناوين) · locdb (قاعدة المواقع) · googlegeo
-  services/                 sheets (قراءة الشيتات) · preflight · runs · compare · whatif · exports · centers
-  web/                      pages (HTML) · api (JSON) · templates/ · static/
-tools/                      بناء قاعدة الأماكن، OSRM، توليد عيّنة
-tests/                      pytest (python -m pytest)
+frontend/                       الواجهة الأمامية (HTML / CSS / JS)
+  templates/                    قوالب الصفحات (Jinja2)
+  static/                       css/ (التنسيقات) و js/ (الخرائط، التفاعل، الـ API)
+backend/                        الباك إند والسيرفر والمنطق البرمجي
+  run.py / run.bat              تشغيل السيرفر من داخل مجلد الباك إند
+  distributor/
+    config.py                   المسارات والإعدادات (.env)
+    __init__.py                 create_app + حارس الطلبات + تسجيل الدخول
+    auth.py  db.py  jobs.py     المستخدمين / جداول التطبيق / مهام الخلفية
+    core/                       engine (التوزيع) · geoprep · geocoder+geonorm · locdb · googlegeo
+    services/                   sheets · preflight · runs · compare · whatif · exports · centers
+    web/                        api.py (JSON REST API) · pages.py (HTML Routes)
+  tests/                        pytest (اختبارات النظام)
+tools/                          بناء قاعدة الأماكن، OSRM، توليد عيّنة
+run.py / run.bat                تشغيل سريع من المجلد الرئيسي
 ```
 النتيجة لنفس المدخلات ونفس التصحيحات ثابتة دايمًا (مفيش عشوائية)، والمحرك هو نفسه اللي اتحقق منه في الإصدارات السابقة طالب بطالب.
 

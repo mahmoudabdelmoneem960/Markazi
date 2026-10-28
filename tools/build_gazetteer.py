@@ -8,12 +8,21 @@ import sqlite3
 import sys
 import time
 
-import osmium as o
+try:
+    import osmium as o
+except ImportError:
+    o = None  # osmium مطلوب فقط عند تشغيل بناء قاعدة الأماكن
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))      # جذر المشروع
 from distributor.core import geonorm as gn  # noqa: E402
 
-PBF, OUT = sys.argv[1], sys.argv[2]
+if len(sys.argv) < 3:
+    if __name__ == "__main__":
+        print("الاستخدام: python build_gazetteer.py egypt.osm.pbf gazetteer.sqlite")
+        sys.exit(1)
+    PBF, OUT = "", ""
+else:
+    PBF, OUT = sys.argv[1], sys.argv[2]
 T0 = time.time()
 
 

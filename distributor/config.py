@@ -3,10 +3,20 @@ import os
 import secrets
 from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+# لو distributor داخل backend/ بيكون ROOT_DIR هو المجلد الأب الرئيسي، ولو لأ يبقى BACKEND_DIR نفسه
+ROOT_DIR = BACKEND_DIR.parent if BACKEND_DIR.name == "backend" else BACKEND_DIR
+BASE_DIR = ROOT_DIR  # متوافق مع أي كود خارجي بيستخدم config.BASE_DIR
+
+# مسارات الواجهة الأمامية والباك إند
+FRONTEND_DIR: Path = Path(os.environ.get("SD_FRONTEND_DIR", ROOT_DIR / "frontend"))
+TEMPLATES_DIR: Path = FRONTEND_DIR / "templates" if (FRONTEND_DIR / "templates").exists() else Path(__file__).resolve().parent / "web" / "templates"
+STATIC_DIR: Path = FRONTEND_DIR / "static" if (FRONTEND_DIR / "static").exists() else Path(__file__).resolve().parent / "web" / "static"
 
 # .env (اختياري) جنب المشروع: سطر لكل متغير KEY=VALUE
-_env = BASE_DIR / ".env"
+_env = ROOT_DIR / ".env"
+if not _env.exists():
+    _env = BACKEND_DIR / ".env"
 if _env.exists():
     for line in _env.read_text(encoding="utf-8-sig").splitlines():
         line = line.strip()
@@ -15,7 +25,7 @@ if _env.exists():
             os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
 
 VERSION = "4.0.0"
-DATA_DIR = Path(os.environ.get("SD_DATA_DIR", BASE_DIR / "data"))
+DATA_DIR = Path(os.environ.get("SD_DATA_DIR", ROOT_DIR / "data"))
 RUNS_DIR = DATA_DIR / "runs"
 TMP_DIR = DATA_DIR / "tmp"
 DB_PATH = Path(os.environ.get("LOCATIONS_DB", DATA_DIR / "app.db"))          # قاعدة واحدة: مواقع + تشغيلات + مستخدمين
@@ -46,3 +56,11 @@ def secret_key():
     if not p.exists():
         p.write_text(secrets.token_hex(32), encoding="utf-8")
     return p.read_text(encoding="utf-8").strip()
+
+
+__all__ = [
+    "BASE_DIR", "ROOT_DIR", "FRONTEND_DIR", "TEMPLATES_DIR", "STATIC_DIR",
+    "VERSION", "DATA_DIR", "RUNS_DIR", "TMP_DIR", "DB_PATH", "GAZETTEER_CANDIDATES",
+    "OSRM_URL", "OSRM_CACHE", "GOOGLE_KEY_FILE", "HOST", "PORT", "MAX_UPLOAD_MB",
+    "KEEP_RUNS", "OPEN_BROWSER", "DEFAULTS", "ensure_dirs", "secret_key"
+]

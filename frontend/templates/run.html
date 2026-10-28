@@ -1,0 +1,287 @@
+{% extends "base.html" %}{% block title %}{{ run.name or run.id }}{% endblock %}
+{% block body %}
+<h1 id="title">{{ run.name or run.students_file }} <small class="mute" style="font-size:13px;font-weight:400">{{ run.created_at }}</small></h1>
+<p class="sub">{{ run.students_file }} + {{ run.centers_file }} · <span id="pstat"></span></p>
+
+<div class="card" id="progress" hidden>
+  <div class="row"><b id="pmsg">...</b><span id="ptime" class="mute"></span><button class="del sm" id="cancel" onclick="cancelRun()">إلغاء</button></div>
+  <div class="bar"><div id="pbar"></div></div>
+  <div class="hint">النتيجة بتظهر أول ما تتحسب، وملفات Excel وQGIS بتتجهز بعدها.</div>
+</div>
+<div class="card" id="errbox" hidden><div class="alert" id="errtxt"></div></div>
+
+<div id="out" hidden>
+  <div class="tabs"><button class="on" data-tab="sum" onclick="tab('sum')">الملخص</button><button data-tab="map" onclick="tab('map')">الخريطة</button>
+    <button data-tab="whatif" onclick="tab('whatif')">ماذا لو؟</button></div>
+
+  <div id="tab-sum">
+    <div class="card"><h2>الملخص</h2><div id="alerts"></div><div class="kpis" id="kpis"></div><div id="warn"></div>
+      <div class="hint" id="dtype"></div><div class="hint" id="geo"></div>
+      <div class="row" style="margin-top:14px" id="dl"></div>
+      <div class="row" style="margin-top:10px"><label style="margin:0">مقارنة مع تشغيل تاني:</label><select id="cmp" class="inline" style="min-width:260px"></select><button class="sec sm" onclick="goCompare()">قارن</button></div></div>
+    <!-- قسم حسب المحافظة: أولاً ومعه تفاصيل المحافظة المختارة -->
+    <div class="card" id="gov_section">
+      <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+        <div class="row" style="gap:10px;align-items:center">
+          <h2 style="margin:0">التوزيع حسب المحافظة</h2>
+          <select id="sel_gov" class="inline" onchange="onGovChange(this.value)" style="min-width:210px;font-weight:600"></select>
+          <button class="btn sec sm" id="btn_all_govs" onclick="resetGovView()" style="display:none">عرض كل المحافظات</button>
+        </div>
+        <span class="hint" id="gov_hint" style="margin:0">اضغط على أي محافظة في الجدول لعرض تفاصيلها (الطلاب، الموزعين، الليفيل، والمراكز)</span>
+      </div>
+
+      <!-- عرض الجدول العام لكل المحافظات -->
+      <div id="gov_overview_box">
+        <div class="scroll"><table id="t_gov"></table></div>
+      </div>
+
+      <!-- عرض تفاصيل المحافظة المختارة -->
+      <div id="gov_detail_box" style="display:none">
+        <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--line)">
+          <div>
+            <h3 id="gov_detail_title" style="margin:0;font-size:18px;color:var(--acc)">تفاصيل المحافظة</h3>
+            <div class="small mute" id="gov_detail_sub"></div>
+          </div>
+          <div class="row" style="gap:8px">
+            <button class="btn sm" onclick="showGovOnMap()">🗺️ عرض على الخريطة</button>
+            <button class="btn sec sm" onclick="resetGovView()">⬅️ رجوع لجدول كل المحافظات</button>
+          </div>
+        </div>
+
+        <div class="kpis" id="gov_kpis" style="margin-bottom:16px"></div>
+
+        <div class="split" style="margin-top:14px">
+          <div>
+            <h3 style="margin:0 0 8px;font-size:15px">📊 تفاصيل الليفيل والتراك في المحافظة</h3>
+            <div class="scroll"><table id="t_gov_lvl"></table></div>
+          </div>
+          <div>
+            <h3 style="margin:0 0 8px;font-size:15px">🏢 مراكز المحافظة ونسب الإشغال</h3>
+            <div class="scroll"><table id="t_gov_cen"></table></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- قسم إشغال المراكز: بعد المحافظات مباشرة ومعه تفاصيل المركز المختار -->
+    <div class="card" id="cen_section">
+      <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+        <div class="row" style="gap:10px;align-items:center;flex-wrap:wrap">
+          <h2 style="margin:0">إشغال المراكز (كل مراكز مصر)</h2>
+          <select id="sel_center" class="inline" onchange="onCenterSelectChange(this.value)" style="min-width:240px;font-weight:600"></select>
+          <input type="text" id="cen_search" class="inline" placeholder="🔍 بحث باسم المركز، الكود، المحافظة، المنطقة..." style="min-width:260px" oninput="filterCentersTable()">
+          <select id="cen_occ_filter" class="inline" onchange="filterCentersTable()" style="width:140px">
+            <option value="">كل حالات الإشغال</option>
+            <option value="full">ممتلئ (100%)</option>
+            <option value="high">شبه ممتلئ (80–99%)</option>
+            <option value="vacant">به شواغر (&lt; 80%)</option>
+          </select>
+          <button class="btn sec sm" id="btn_all_centers" onclick="resetCenterView()" style="display:none">عرض كل المراكز</button>
+        </div>
+        <span class="hint" id="cen_hint" style="margin:0">اضغط على أي مركز في الجدول لعرض تفاصيله بالكامل (المقاعد، الموزعين، الجروبات، والمستويات)</span>
+      </div>
+
+      <!-- عرض الجدول العام لكل مراكز مصر -->
+      <div id="cen_overview_box">
+        <div class="scroll tall"><table id="t_cen"></table></div>
+      </div>
+
+      <!-- عرض تفاصيل المركز المختار -->
+      <div id="cen_detail_box" style="display:none">
+        <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--line)">
+          <div>
+            <h3 id="cen_detail_title" style="margin:0;font-size:18px;color:var(--acc)">تفاصيل المركز</h3>
+            <div class="small mute" id="cen_detail_sub"></div>
+          </div>
+          <div class="row" style="gap:8px">
+            <button class="btn sm" onclick="showSelectedCenterOnMap()">🗺️ عرض على الخريطة</button>
+            <a class="btn sm sec" id="cen_btn_edit" href="#" target="_blank">✏️ صفحة المراكز</a>
+            <button class="btn sec sm" onclick="resetCenterView()">⬅️ رجوع لجدول كل المراكز</button>
+          </div>
+        </div>
+
+        <div class="kpis" id="cen_kpis" style="margin-bottom:16px"></div>
+
+        <div class="split" style="margin-top:14px">
+          <div>
+            <h3 style="margin:0 0 8px;font-size:15px">📊 تفاصيل المستويات والتراكات بالمركز</h3>
+            <div class="scroll"><table id="t_cen_lvl"></table></div>
+          </div>
+          <div>
+            <h3 style="margin:0 0 8px;font-size:15px">🗓️ الجروبات ومواعيدها بالمركز</h3>
+            <div class="scroll"><table id="t_cen_grp"></table></div>
+          </div>
+        </div>
+
+        <div id="cen_extra_info" style="margin-top:16px;padding-top:12px;border-top:1px solid var(--line)"></div>
+      </div>
+    </div>
+
+    <!-- قسم حسب الليفيل/التراك والعجز في السعة -->
+    <div class="grid2">
+      <div class="card"><h2>حسب الليفيل/التراك (على مستوى الجمهورية)</h2><div class="scroll"><table id="t_lvl"></table></div></div>
+      <div class="card"><h2>العجز في السعة (محافظة × ليفيل/تراك)</h2>
+        <div class="hint" style="margin:0 0 8px">العجز = طلاب − مقاعد المحافظة. الجروبات الإضافية محسوبة بسعة الجروب المعتادة لنفس الليفيل. جرّب إضافة جروب من تبويب «ماذا لو؟».</div>
+        <div class="scroll"><table id="t_def"></table></div></div>
+    </div>
+
+    <div class="card" id="susbox" hidden><h2 class="warn">إحداثيات مشبوهة (للمراجعة)</h2>
+      <div id="sus_c_wrap"><b>مراكز بمواقع مشكوك فيها</b><div class="scroll"><table id="t_susc"></table></div></div>
+      <div id="sus_s_wrap" style="margin-top:14px">
+        <div class="row" style="justify-content:space-between;margin-bottom:8px">
+          <b id="sus_s_title">طلاب إحداثياتهم مشبوهة</b>
+          <div class="row">
+            <button class="btn ok sm" id="btn_fix_all_sus" onclick="fixAllSuspects()">⚡ تصحيح ذكي لجميع الطلاب وحفظ في قاعدة المواقع</button>
+            <button class="btn sec sm" onclick="openAllSuspectsModal()">📋 عرض جدول كل المشبوهين</button>
+          </div>
+        </div>
+        <div class="scroll"><table id="t_suss"></table></div>
+      </div>
+    </div>
+
+    <!-- أسباب الـVP نزلت تحت خالص كما طلب المستخدم -->
+    <div class="card"><h2>أسباب الـVP</h2><div class="scroll"><table id="t_reason"></table></div></div>
+  </div>
+
+  <div id="tab-map" hidden>
+    <div class="card">
+      <div class="row" style="align-items:center;flex-wrap:wrap;gap:8px">
+        <select id="m_gov" class="inline" onchange="mapGov()"><option value="">كل المحافظات</option></select>
+        <label style="margin:0"><input type="checkbox" id="m_vp" onchange="mapVP()"> عرض طلاب الـVP في المحافظة المختارة</label>
+        <button class="btn sm" id="btn_map_far" onclick="toggleMapFarStudents()" style="background:#e08a1e;border-color:#c2781a">📍 الطلاب الأبعد من 50 كم (<span id="m_far_cnt">501</span>)</button>
+        <button class="btn sm sec" id="btn_toggle_far_lines" onclick="toggleFarLines()" style="display:none">📏 إظهار/إخفاء خطوط المسافات</button>
+        <button class="btn sm sec" id="btn_open_far_modal" onclick="openFarStudentsModal('gov')">📋 جدول الطلاب والمسافات</button>
+        <span class="hint" id="m_msg" style="margin:0"></span>
+      </div>
+      <div class="legend"><span><i style="background:#16794c"></i>مركز إشغاله أقل من 80%</span><span><i style="background:#e08a1e"></i>80–99%</span><span><i style="background:#b42318"></i>ممتلئ</span><span><i style="background:#16794c;width:8px;height:8px"></i>طالب موزع</span><span><i style="background:#d92d20;width:8px;height:8px"></i>طالب VP</span><span><i style="background:#e08a1e;width:10px;height:10px;border:1px solid #fff"></i>طالب &gt; 50 كم</span></div>
+      <div id="map" class="map"></div>
+      <div class="hint">اضغط على أي طالب أبعد من 50 كم لعرض أقرب مركز متاح، المسافة، وزر رسم الخط المباشر بينهما.</div>
+    </div>
+  </div>
+
+  <div id="tab-whatif" hidden>
+    <div class="card"><h2>ماذا لو ضفنا جروب؟</h2>
+      <div class="hint" style="margin:0 0 10px">تقدير سريع: الطلاب الـVP من نفس الليفيل في محافظة المركز، الأقرب فالأقرب، في حدود أقصى مسافة. (من غير إعادة توزيع كاملة.)</div>
+      <div class="grid3">
+        <div><label>المركز</label><select id="w_center"></select></div>
+        <div><label>الليفيل/التراك</label><select id="w_level"></select></div>
+        <div><label>سعة الجروب × عدد الجروبات</label><div class="row"><input type="number" id="w_cap" class="inline" value="25" min="1" style="width:90px"> × <input type="number" id="w_n" class="inline" value="1" min="1" style="width:70px"><button onclick="whatIf()">احسب</button></div></div>
+      </div>
+      <div id="w_out" style="margin-top:12px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: فحص وتصحيح موقع المركز -->
+<div id="modal_center_fix" class="modal-overlay" hidden>
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3 id="mcf_title">فحص وتصحيح موقع المركز</h3>
+      <button class="btn-close" onclick="closeModal('modal_center_fix')">&times;</button>
+    </div>
+    <div class="modal-body" id="mcf_body"></div>
+    <div class="modal-footer">
+      <button class="sec" onclick="closeModal('modal_center_fix')">إغلاق</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: فحص وتعديل بيانات الطالب الفردي -->
+<div id="modal_student_inspect" class="modal-overlay" hidden>
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3 id="msi_title">بيانات الطالب</h3>
+      <button class="btn-close" onclick="closeModal('modal_student_inspect')">&times;</button>
+    </div>
+    <div class="modal-body" id="msi_body"></div>
+    <div class="modal-footer">
+      <button class="ok" id="msi_save_btn" onclick="saveStudentModal()">حفظ التعديلات</button>
+      <button class="sec" onclick="closeModal('modal_student_inspect')">إغلاق</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: كل الطلاب بأرقام قومية غير صحيحة -->
+<div id="modal_invalid_nids" class="modal-overlay" hidden>
+  <div class="modal-box lg">
+    <div class="modal-header">
+      <h3>الطلاب بأرقام قومية غير صحيحة (ليست 14 رقمًا) <span class="badge bad" id="min_count">0</span></h3>
+      <button class="btn-close" onclick="closeModal('modal_invalid_nids')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="row" style="margin-bottom:12px">
+        <input type="text" id="min_search" class="inline" placeholder="بحث بالرقم القومي أو رقم الصف..." style="min-width:260px" oninput="searchInvalidNids()">
+        <span class="hint" id="min_hint" style="margin:0"></span>
+      </div>
+      <div class="scroll tall"><table id="t_min"></table></div>
+    </div>
+    <div class="modal-footer">
+      <button class="sec" onclick="closeModal('modal_invalid_nids')">إغلاق</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: جدول كل الطلاب المشبوهين -->
+<div id="modal_all_suspects" class="modal-overlay" hidden>
+  <div class="modal-box lg">
+    <div class="modal-header">
+      <h3>الطلاب ذوو الإحداثيات المشبوهة (coord_suspect) <span class="badge warn" id="mas_count">0</span></h3>
+      <button class="btn-close" onclick="closeModal('modal_all_suspects')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="row" style="margin-bottom:12px;justify-content:space-between">
+        <div class="hint">الطلاب دول إحداثياتهم بعيدة عن وسيط المحافظة (>100 كم) وغالبًا ده بسبب محافظات مترامية الأطراف.</div>
+        <button class="btn ok sm" onclick="fixAllSuspects()">⚡ تصحيح ذكي لجميع الطلاب وحفظ في قاعدة المواقع</button>
+      </div>
+      <div class="scroll tall"><table id="t_mas"></table></div>
+    </div>
+    <div class="modal-footer">
+      <button class="sec" onclick="closeModal('modal_all_suspects')">إغلاق</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: الطلاب الأبعد من الحد الأقصى للمسافة (50 كم) -->
+<div id="modal_far_students" class="modal-overlay" hidden>
+  <div class="modal-box lg">
+    <div class="modal-header">
+      <h3 style="display:flex;align-items:center;gap:8px">
+        <span>الطلاب الأبعد من الحد الأقصى للمسافة (50 كم)</span>
+        <span class="badge warn" id="mfs_count">0</span>
+      </h3>
+      <button class="btn-close" onclick="closeModal('modal_far_students')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px">
+        <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
+          <div class="tabs" style="margin:0">
+            <button class="on sm" id="mfs_tab_gov" onclick="setFarStudentsTab('gov')">أبعد من 50 كم بمحافظتهم (<span id="mfs_cnt_gov">501</span>)</button>
+            <button class="sm" id="mfs_tab_suspect" onclick="setFarStudentsTab('suspect')">مشكوك بإحداثياتهم (<span id="mfs_cnt_sus">49</span>)</button>
+            <button class="sm" id="mfs_tab_all" onclick="setFarStudentsTab('all')">الكل (<span id="mfs_cnt_all">550</span>)</button>
+          </div>
+          <input type="text" id="mfs_search" class="inline" placeholder="🔍 بحث بالرقم القومي، المحافظة، المنطقة، المركز..." style="min-width:240px" oninput="searchFarStudents()">
+        </div>
+        <div class="row" style="gap:8px">
+          <button class="btn sm" onclick="showFarStudentsOnMap(CURRENT_FAR_TAB)">🗺️ عرض على الخريطة</button>
+        </div>
+      </div>
+      <div class="scroll tall"><table id="t_mfs"></table></div>
+      <div class="row" style="justify-content:space-between;align-items:center;margin-top:12px">
+        <span class="small mute" id="mfs_page_info"></span>
+        <div class="row" style="gap:6px">
+          <button class="btn sm sec" id="mfs_prev" onclick="prevFarPage()" disabled>السابق</button>
+          <button class="btn sm sec" id="mfs_next" onclick="nextFarPage()" disabled>التالي</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="sec" onclick="closeModal('modal_far_students')">إغلاق</button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script>const RUN = {{ run|tojson }};</script>
+<script src="{{ url_for('static', filename='js/run.js') }}"></script>
+{% endblock %}

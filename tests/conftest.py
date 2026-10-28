@@ -7,7 +7,9 @@ from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parent.parent
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+ROOT = BACKEND_DIR.parent if BACKEND_DIR.name == "backend" else BACKEND_DIR
+sys.path.insert(0, str(BACKEND_DIR))
 sys.path.insert(0, str(ROOT))
 
 _tmp = tempfile.mkdtemp(prefix="sd_test_")

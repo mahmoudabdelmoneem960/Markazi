@@ -1,10 +1,11 @@
 """تطبيق توزيع الطلاب على المراكز: create_app() بيبني تطبيق Flask كامل."""
 import urllib.parse
+from typing import Any, cast
 
 from flask import Flask, jsonify, redirect, request, url_for
 from flask_login import current_user
 
-from distributor import auth, config, jobs
+from . import config, auth, jobs
 
 _LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
 _PUBLIC = {"auth.login", "auth.setup", "static", "pages.health"}
@@ -12,15 +13,18 @@ _PUBLIC = {"auth.login", "auth.setup", "static", "pages.health"}
 
 def create_app():
     config.ensure_dirs()
-    app = Flask(__name__, template_folder="web/templates", static_folder="web/static")
+    templates_dir = getattr(config, "TEMPLATES_DIR", config.BASE_DIR / "frontend" / "templates")
+    static_dir = getattr(config, "STATIC_DIR", config.BASE_DIR / "frontend" / "static")
+    app = Flask(__name__, template_folder=str(templates_dir), static_folder=str(static_dir))
     app.config["MAX_CONTENT_LENGTH"] = config.MAX_UPLOAD_MB * 1024 * 1024
     app.config["SECRET_KEY"] = config.secret_key()
     app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
     app.config["REMEMBER_COOKIE_SAMESITE"] = "Lax"
-    app.jinja_env.globals["VERSION"] = config.VERSION
+    cast(dict[str, Any], app.jinja_env.globals)["VERSION"] = config.VERSION
+    app.context_processor(lambda: {"VERSION": config.VERSION})
     auth.login_manager.init_app(app)
     app.register_blueprint(auth.bp)
-    from distributor.web import api, pages
+    from .web import api, pages
     app.register_blueprint(pages.bp)
     app.register_blueprint(api.bp)
     jobs.startup_cleanup()
