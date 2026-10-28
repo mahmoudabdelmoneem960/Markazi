@@ -161,28 +161,28 @@ function render(r) {
   });
 
   const b2KpiBadge = b2GovCount > 0
-    ? `<div style="margin-top:4px"><span class="badge bad" style="font-size:11px;font-weight:700" title="مشكلة في البيانات: تم رصد طلاب في محافظات البند الثاني!">⚠️ بند ثاني: ${b2GovCount} (${esc(b2GovNames.join("، "))})</span></div>`
-    : `<div style="font-size:11px;color:var(--mute);margin-top:4px">بند ثاني: 0 (سليم ✓)</div>`;
+    ? `<div style="margin-top:2px"><span class="badge bad" style="font-size:9.5px;font-weight:700;padding:1px 4px" title="مشكلة في البيانات: تم رصد طلاب في محافظات البند الثاني!">⚠️ بند ثاني: ${b2GovCount}</span></div>`
+    : `<div style="font-size:9.5px;color:var(--mute);margin-top:2px">بند ثاني: 0 (سليم ✓)</div>`;
 
   const govKpiValue = `
-    <div>
-      <div style="font-size:26px;font-weight:700;line-height:1.1">${n(govCount)} <small style="font-size:13px;font-weight:600;color:var(--mute)">محافظة</small></div>
-      <div style="font-size:12px;font-weight:600;margin-top:4px;display:flex;gap:4px;justify-content:center;flex-wrap:wrap">
-        <span class="pill brand" style="padding:1px 6px">بند 1: <b>${b1GovCount}</b></span>
-        <span class="pill ok" style="padding:1px 6px">بند 3: <b>${b3GovCount}</b></span>
+    <div style="width:100%">
+      <div style="font-size:19px;font-weight:800;line-height:1.1">${n(govCount)} <small style="font-size:11px;font-weight:600;color:var(--mute)">محافظة</small></div>
+      <div style="font-size:10px;font-weight:600;margin-top:2px;display:flex;gap:3px;justify-content:center;flex-wrap:wrap">
+        <span class="pill brand" style="padding:1px 4px;font-size:9.5px">بند 1: <b>${b1GovCount}</b></span>
+        <span class="pill ok" style="padding:1px 4px;font-size:9.5px">بند 3: <b>${b3GovCount}</b></span>
       </div>
       ${b2KpiBadge}
     </div>
   `;
 
   $("#kpis").innerHTML =
-    k(`${n(s.assigned)} <small style="font-size:15px;color:var(--ok)">(${assignedRatio}%)</small>`, "الطلاب المسكنين بنجاح", "ok", "kpi-ok") +
+    k(`${n(s.assigned)} <small style="font-size:12px;color:var(--ok)">(${assignedRatio}%)</small>`, "الطلاب المسكنين بنجاح", "ok", "kpi-ok") +
     k(n(s.students), "إجمالي عدد الطلاب", "", "kpi-brand") +
     k(govKpiValue, "عدد المحافظات في كل بند", b2GovCount > 0 ? "bad" : "", b2GovCount > 0 ? "kpi-bad" : "kpi-brand") +
     k(n(s.vp), "قيد الانتظار (VP)", "bad", "kpi-bad") +
     k(n(s.same_area), "في نفس منطقتهم السكنية", "", "kpi-ok") +
     k((s.avg_km || "0") + " كم", "متوسط مسافة الطريق", "brand", "kpi-brand") +
-    k(`${n(s.centers)} مركز / ${n(s.groups)} جروب`, "المراكز والقاعات المستغلة", "", "") +
+    k(`<span style="font-size:16px">${n(s.centers)} مركز / ${n(s.groups)} جروب</span>`, "المراكز والقاعات المستغلة", "", "") +
     k(n(s.seats), "إجمالي المقاعد المتاحة", "", "");
 
   // تحذيرات مع أزرار تفاعلية

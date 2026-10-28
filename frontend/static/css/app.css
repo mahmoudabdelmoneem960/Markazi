@@ -646,20 +646,33 @@ button:disabled {
 /* Modern KPI Metric Cards */
 .kpis {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 16px;
-  margin-bottom: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+#kpis {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 18px;
 }
 
 .kpi {
   background: var(--card);
   border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  padding: 18px;
+  border-radius: var(--radius-md);
+  padding: 12px 6px;
   box-shadow: var(--shadow-sm);
   position: relative;
   overflow: hidden;
   transition: all 0.25s ease;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  min-width: 0;
 }
 
 .kpi:hover {
@@ -685,17 +698,33 @@ button:disabled {
 
 .kpi b {
   display: block;
-  font-size: 28px;
+  font-size: 20px;
   font-family: var(--font-sans);
   font-weight: 800;
   line-height: 1.2;
-  margin-bottom: 4px;
+  margin-bottom: 3px;
+  word-break: break-word;
+  width: 100%;
 }
 
 .kpi span {
   color: var(--mute);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+@media (max-width: 1080px) {
+  #kpis {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+}
+
+@media (max-width: 600px) {
+  #kpis {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 /* Status Colors & Pills */
