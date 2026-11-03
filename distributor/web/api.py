@@ -7,7 +7,7 @@ from flask_login import current_user
 
 from distributor import config, db, jobs
 from distributor.core import engine, locdb
-from distributor.services import centers, compare, exports, runs, sheets, whatif
+from distributor.services import centers, compare, exports, planning, runs, sheets, whatif
 
 bp = Blueprint("api", __name__, url_prefix="/api")
 
@@ -288,6 +288,95 @@ def compare_xlsx():
         return jsonify(error=str(e)), 400
     return Response(data, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     headers={"Content-Disposition": f"attachment; filename=compare_{a}_{b}.xlsx"})
+
+
+# ---------------- التخطيط ----------------
+def _cap(v):
+    try:
+        v = int(v)
+    except (TypeError, ValueError):
+        return None
+    return v if 0 < v <= 500 else None
+
+
+@bp.route("/planning/analyze", methods=["POST"])
+def planning_analyze():
+    """رفع شيت الطلاب ← تحليل ← يتحفظ في الـ history."""
+    sf = request.files.get("students")
+    if not sf:
+        return jsonify(error="ارفع شيت الطلاب."), 400
+    try:
+        rep = planning.analyze(sheets.parse_file(sf.filename, sf.read()))
+    except ValueError as e:
+        return jsonify(error=str(e)), 400
+    except Exception as e:  # noqa
+        return jsonify(error=f"تعذر تحليل الشيت: {e}"), 400
+    cap = _cap(request.form.get("cap"))
+    pid = planning.save(rep, sf.filename or "", _user(), cap)
+    return jsonify(id=pid, name=sf.filename, file_name=sf.filename, cap=cap, report=rep)
+
+
+@bp.route("/planning/history")
+def planning_history():
+    return jsonify(planning.history())
+
+
+@bp.route("/planning/<pid>", methods=["GET", "POST", "DELETE"])
+def planning_item(pid):
+    p = planning.get(pid)
+    if not p:
+        return jsonify(error="التحليل ده مش موجود."), 404
+    if request.method == "DELETE":
+        planning.delete(pid)
+        return jsonify(ok=True)
+    if request.method == "POST":
+        d = _json() or {}
+        fields = {}
+        if "name" in d:
+            fields["name"] = str(d["name"] or "").strip()[:200] or p["file_name"]
+        if "cap" in d:
+            fields["cap"] = _cap(d["cap"])
+        planning.update(pid, **fields)
+        return jsonify(ok=True, **fields)
+    return jsonify(p)
+
+
+def _flag_filters():
+    a = request.args
+    area = a.get("area")
+    return {"kind": a.get("kind", ""), "gov": a.get("gov", ""), "conf": a.get("conf", ""),
+            "area": area if area not in (None, "") else None, "q": a.get("q", "")}
+
+
+@bp.route("/planning/<pid>/flags")
+def planning_flags(pid):
+    """الطلاب اللي عندهم مشاكل في المنطقة (بدون منطقة / شارع / محافظة تانية) مع فلترة وصفحات."""
+    d = planning.flags(pid, page=request.args.get("page", 1, type=int), per_page=request.args.get("per", 50, type=int),
+                       **_flag_filters())
+    if d is None:
+        return jsonify(error="التحليل ده اتحفظ قبل فحص المناطق — ارفع نفس الشيت تاني."), 404
+    return jsonify(d)
+
+
+@bp.route("/planning/<pid>/flags.xlsx")
+def planning_flags_xlsx(pid):
+    data = planning.flags_excel(pid, **_flag_filters())
+    if data is None:
+        return jsonify(error="التحليل ده اتحفظ قبل فحص المناطق — ارفع نفس الشيت تاني."), 404
+    return send_file(data, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                     as_attachment=True, download_name=f"area_issues_{pid}.xlsx")
+
+
+@bp.route("/planning/<pid>/export.xlsx")
+def planning_export(pid):
+    p = planning.get(pid)
+    if not p:
+        return jsonify(error="التحليل ده مش موجود."), 404
+    cap = _cap(request.args.get("cap")) or p.get("cap")
+    data = planning.to_excel(p["report"], cap)
+    base = os.path.splitext(p.get("name") or p.get("file_name") or "planning")[0]
+    return send_file(data, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                     as_attachment=True, download_name=f"planning_{base}.xlsx")
 
 
 # ---------------- المراكز ----------------

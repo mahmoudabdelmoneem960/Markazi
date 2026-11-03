@@ -51,6 +51,11 @@ def compare_page():
     return render_template("compare.html", a=request.args.get("a", ""), b=request.args.get("b", ""))
 
 
+@bp.route("/planning")
+def planning_page():
+    return render_template("planning.html", plan_id=request.args.get("id", ""))
+
+
 @bp.route("/settings")
 def settings_page():
     con = db.connect()

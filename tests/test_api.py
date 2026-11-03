@@ -162,3 +162,49 @@ def test_far_students_endpoints(client):
 
 
 
+
+
+def test_planning_analyze_history_and_export(client, sample_files):
+    import pandas as pd
+    sb = sample_files[0]
+    assert client.get("/planning").status_code == 200
+    r = client.post("/api/planning/analyze", data={"students": (io.BytesIO(sb), "students.xlsx"), "cap": "25"},
+                    content_type="multipart/form-data")
+    assert r.status_code == 200, r.get_json()
+    res = r.get_json()
+    pid, j = res["id"], res["report"]
+    assert res["cap"] == 25 and j["total"] > 0
+    assert sum(g["students"] for g in j["govs"]) == j["total"]
+    assert sum(b["students"] for b in j["bands"]) == j["total"]
+    assert sum(lv["students"] for lv in j["levels"]) == j["total"]
+    counts = [g["students"] for g in j["govs"]]
+    assert counts == sorted(counts, reverse=True) and j["govs"][0]["rank"] == 1
+    for g in j["govs"]:
+        assert sum(g["levels"].values()) == g["students"]
+        assert g["areas"] and sum(a["students"] for a in g["areas"]) == g["students"]
+        named = [a["students"] for a in g["areas"] if a["area"] != "بدون منطقة"]
+        assert named == sorted(named, reverse=True)
+    want =sum(-(-c // 25) for g in j["govs"] for lv, c in g["levels"].items() if c and lv != "غير محدد")
+
+    # السجل
+    h = client.get("/api/planning/history").get_json()
+    row = next(x for x in h if x["id"] == pid)
+    assert row["n_students"] == j["total"] and row["groups"] == want and "report" not in row
+    assert client.get(f"/api/planning/{pid}").get_json()["report"]["total"] == j["total"]
+
+    # تغيير الاسم والسعة
+    r = client.post(f"/api/planning/{pid}", json={"name": "شيت أكتوبر", "cap": 20})
+    assert r.status_code == 200
+    p = client.get(f"/api/planning/{pid}").get_json()
+    assert p["name"] == "شيت أكتوبر" and p["cap"] == 20
+
+    # Excel من التحليل المحفوظ (من غير رفع تاني)
+    r = client.get(f"/api/planning/{pid}/export.xlsx?cap=25")
+    assert r.status_code == 200 and r.data[:2] == b"PK"
+    gm = pd.read_excel(io.BytesIO(r.data), sheet_name="جروبات محافظة × ليفيل")
+    assert int(gm.iloc[-1]["إجمالي الجروبات"]) == want
+
+    # مسح
+    assert client.delete(f"/api/planning/{pid}").status_code == 200
+    assert client.get(f"/api/planning/{pid}").status_code == 404
+    assert client.post("/api/planning/analyze", data={}, content_type="multipart/form-data").status_code == 400

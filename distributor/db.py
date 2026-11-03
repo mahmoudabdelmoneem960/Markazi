@@ -20,6 +20,8 @@ CREATE TABLE IF NOT EXISTS jobs (
 CREATE TABLE IF NOT EXISTS settings (k TEXT PRIMARY KEY, v TEXT);
 CREATE TABLE IF NOT EXISTS audit (
   id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT, user TEXT, action TEXT, target TEXT, detail TEXT);
+CREATE TABLE IF NOT EXISTS plans (
+  id TEXT PRIMARY KEY, created_at TEXT, user TEXT, name TEXT, file_name TEXT, n_students INTEGER, cap INTEGER, report TEXT);
 """
 
 
@@ -33,6 +35,8 @@ def connect():
     con = locdb.connect(str(config.DB_PATH))
     with locdb._lock:
         con.executescript(APP_SCHEMA)
+        if "flags" not in {r[1] for r in con.execute("PRAGMA table_info(plans)")}:
+            con.execute("ALTER TABLE plans ADD COLUMN flags TEXT")   # صفوف الطلاب اللي عندهم مشاكل في المنطقة (التخطيط)
         con.commit()
     return con
 
@@ -144,4 +148,50 @@ def jobs_mark_stale(con):
     with locdb._lock:
         con.execute("UPDATE jobs SET state='error', error='السيستم اتقفل أثناء التشغيل', finished_at=? WHERE state IN ('running','queued')", (now(),))
         con.execute("UPDATE runs SET status='error', error='السيستم اتقفل أثناء التوزيع' WHERE status IN ('running','queued')")
+        con.commit()
+
+
+# ---------------- التخطيط (history) ----------------
+_PLAN_COLS = "id, created_at, user, name, file_name, n_students, cap, report"  # flags كبيرة: بتتقري لوحدها
+
+def plan_insert(con, plan):
+    with locdb._lock:
+        con.execute("INSERT INTO plans(id, created_at, user, name, file_name, n_students, cap, report, flags) VALUES (?,?,?,?,?,?,?,?,?)",
+                    (plan["id"], now(), plan.get("user", ""), plan.get("name", ""), plan.get("file_name", ""),
+                     plan.get("n_students", 0), plan.get("cap"), json.dumps(plan["report"], ensure_ascii=False),
+                     json.dumps(plan.get("flags") or [], ensure_ascii=False)))
+        con.commit()
+
+
+def plan_update(con, plan_id, **fields):
+    fields = {k: v for k, v in fields.items() if k in ("name", "cap")}
+    if not fields:
+        return
+    with locdb._lock:
+        con.execute(f"UPDATE plans SET {', '.join(k + '=?' for k in fields)} WHERE id=?", [*fields.values(), plan_id])
+        con.commit()
+
+
+def plan_get(con, plan_id):
+    r = con.execute(f"SELECT {_PLAN_COLS} FROM plans WHERE id=?", (plan_id,)).fetchone()
+    if r is None:
+        return None
+    d = dict(r)
+    d["report"] = json.loads(d["report"]) if d.get("report") else None
+    return d
+
+
+def plans_list(con, limit=200):
+    return [dict(r) for r in con.execute(f"SELECT {_PLAN_COLS} FROM plans ORDER BY created_at DESC, rowid DESC LIMIT ?", (limit,))]
+
+
+def plan_flags(con, plan_id):
+    """صفوف الطلاب المتعلّمين (None = التحليل قديم ومفيهوش الفحص ده)."""
+    r = con.execute("SELECT flags FROM plans WHERE id=?", (plan_id,)).fetchone()
+    return json.loads(r["flags"]) if r and r["flags"] else None
+
+
+def plan_delete(con, plan_id):
+    with locdb._lock:
+        con.execute("DELETE FROM plans WHERE id=?", (plan_id,))
         con.commit()

@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}تخطيط{% endblock %}
+
+{% block body %}
+<div class="page-header">
+  <div class="page-title-area">
+    <h1>تخطيط</h1>
+    <p class="sub">ارفع شيت الطلاب لوحده وحدد سعة الجروب: هتعرف العدد، والبنود، وعدد الطلاب والجروبات المطلوبة في كل محافظة وكل ليفيل، قبل أي توزيع.</p>
+  </div>
+</div>
+
+<div class="card" style="padding:18px 22px">
+  <div class="grid2" style="grid-template-columns:3fr 1fr;align-items:stretch">
+    <div class="dropzone" id="dz_students" onclick="$('#students').click()">
+      <input type="file" id="students" accept=".xlsx,.xls,.csv" style="display:none" onchange="onPick()">
+      <div class="dropzone-icon">🎓</div>
+      <div class="dropzone-title">شيت الطلاب (Excel / CSV)</div>
+      <div class="dropzone-desc">اسحب وأفلت الملف هنا، أو انقر للاختيار من جهازك</div>
+      <div class="small mute">الأعمدة المطلوبة: المحافظة (gov) والليفيل (Level). الشكل القياسي أو «Student DB».</div>
+      <div class="small" id="fname" style="margin-top:6px"></div>
+    </div>
+    <div style="display:flex;flex-direction:column;justify-content:center;gap:6px">
+      <label for="cap" style="margin:0">👥 سعة الجروب (عدد الطلاب في الجروب)</label>
+      <input type="number" id="cap" min="1" max="500" step="1" value="25" oninput="onCap()">
+      <div class="small mute">الجروب الواحد ليفيل واحد في محافظة واحدة، فعدد الجروبات بيتحسب لكل ليفيل في كل محافظة لوحده (تقريب لفوق).</div>
+    </div>
+  </div>
+  <div class="row" style="gap:10px;margin-top:14px">
+    <a class="btn sec sm" id="xl" hidden>📥 تحميل التقرير (Excel)</a>
+    <span class="hint" id="msg" style="margin:0"></span>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header-clean">
+    <h2><span>🕘</span> سجل التحليلات <span class="pill brand" id="h_count"></span></h2>
+    <input type="search" id="h_q" class="inline" placeholder="بحث بالاسم أو الملف..." oninput="renderHistory()" style="min-width:220px">
+  </div>
+  <div class="scroll" style="max-height:340px"><table id="t_hist"></table></div>
+</div>
+
+<div id="out" hidden class="fade-in">
+  <div class="row" style="justify-content:space-between;margin-top:20px">
+    <h2 style="margin:0">📄 <span id="cur_name"></span></h2>
+    <span class="hint" id="cur_meta" style="margin:0"></span>
+  </div>
+  <div class="kpis k7" id="kpis" style="margin-top:12px"></div>
+  <div class="hint" id="p_notes" style="margin-bottom:14px"></div>
+
+  <div class="card">
+    <div class="card-header-clean">
+      <h2><span>📍</span> المحافظات (مرتبة بعدد الطلاب)</h2>
+      <div class="row" style="gap:8px">
+        <button type="button" class="btn sm sec" id="btn_all_areas" onclick="toggleAllAreas()">▾ إظهار كل المناطق</button>
+        <select id="f_band" class="inline" onchange="renderGovs()" style="min-width:180px"></select>
+      </div>
+    </div>
+    <div class="scroll tall"><table id="t_govs"></table></div>
+  </div>
+
+  <div class="card" id="rv_card">
+    <div class="card-header-clean">
+      <h2><span>🚩</span> مراجعة المناطق <span class="pill bad" id="rv_total"></span></h2>
+      <a class="btn sm sec" id="rv_xl" title="الطلاب اللي في الفلتر الحالي">📥 تحميل الطلاب (Excel)</a>
+    </div>
+    <div class="hint" style="margin:0 0 10px">الطلاب اللي محتاجين مراجعة في عمود المنطقة. كل طالب معاه <b>رقم الصف في الشيت</b> والرقم القومي عشان توصله وتصلّحه.</div>
+    <div class="row" id="rv_tabs" style="gap:8px;margin-bottom:12px"></div>
+    <div id="rv_body">
+      <div class="row" style="gap:8px;margin-bottom:10px">
+        <select id="rv_gov" class="inline" onchange="rvSet({gov: this.value})" style="min-width:170px"></select>
+        <select id="rv_conf" class="inline" onchange="rvSet({conf: this.value})" style="min-width:150px">
+          <option value="">أكيد + مشتبه</option><option value="أكيد">أكيد بس</option><option value="مشتبه">مشتبه بس</option>
+        </select>
+        <input type="search" id="rv_q" class="inline" placeholder="بحث: رقم قومي / رقم صف / منطقة / عنوان" style="min-width:260px">
+        <span id="rv_area_pill"></span>
+      </div>
+      <div id="rv_groups_wrap">
+        <div class="small mute" style="margin-bottom:4px">المناطق المتكررة (دوس على منطقة تشوف طلابها):</div>
+        <div class="scroll" style="max-height:260px;margin-bottom:12px"><table id="rv_groups"></table></div>
+      </div>
+      <div class="scroll tall"><table id="rv_rows"></table></div>
+      <div class="row" style="justify-content:space-between;margin-top:8px">
+        <span class="hint" id="rv_info" style="margin:0"></span>
+        <div class="row" style="gap:6px">
+          <button class="btn sm sec" id="rv_prev" onclick="rvPage(-1)">→ السابق</button>
+          <button class="btn sm sec" id="rv_next" onclick="rvPage(1)">التالي ←</button>
+        </div>
+      </div>
+    </div>
+    <div id="rv_missing" class="hint" hidden></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header-clean"><h2><span>🎯</span> الليفيلات (مرتبة بعدد الطلاب)</h2></div>
+    <div class="scroll"><table id="t_levels"></table></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header-clean">
+      <h2><span>🧮</span> كل ليفيل في كل محافظة</h2>
+      <select id="f_matrix" class="inline" onchange="renderMatrix()" style="min-width:180px">
+        <option value="students">عدد الطلاب</option>
+        <option value="groups">عدد الجروبات المطلوبة</option>
+      </select>
+    </div>
+    <div class="scroll tall"><table id="t_matrix"></table></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>const PLAN0 = {{ plan_id|tojson }};</script>
+<script src="{{ url_for('static', filename='js/planning.js') }}"></script>
+{% endblock %}

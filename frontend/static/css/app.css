@@ -732,6 +732,11 @@ button:disabled {
   }
 }
 
+/* صف كروت من 7 (صفحة التخطيط) */
+#kpis.k7 { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+@media (max-width: 1080px) { #kpis.k7 { grid-template-columns: repeat(4, 1fr); } }
+@media (max-width: 600px) { #kpis.k7 { grid-template-columns: repeat(2, 1fr); } }
+
 /* Status Colors & Pills */
 .ok { color: var(--ok); }
 .bad { color: var(--bad); }
