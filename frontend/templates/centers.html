@@ -39,6 +39,28 @@
   <div class="hint" id="gres"></div>
 </div>
 
+<!-- مراجعة المواقع: لينك الشيت مقابل العنوان -->
+<div class="card" id="rv_card" style="margin-top:16px">
+  <div class="card-header-clean">
+    <h2><span>🧭</span> مراجعة مواقع المراكز <span class="small mute">(لينك الشيت مقابل العنوان)</span></h2>
+    <div class="row" style="gap:8px">
+      <button class="btn sm gradient" id="rvbtn" onclick="reviewRun()">🔍 فحص المواقع</button>
+      <button class="btn del sm" id="rvcancel" onclick="reviewCancel()" hidden>إلغاء</button>
+      <a class="btn sm sec" href="/api/centers/master.xlsx">📥 المواقع المعتمدة (Excel)</a>
+    </div>
+  </div>
+  <div class="hint" style="margin:0 0 10px">
+    الفحص بيقرا لينك كل مركز من الشيت، وبيقدّر مكانه من العنوان، ولو اللينك بعيد عن العنوان بيعلّمه. اختار الصح من كل مركز واحفظه:
+    المواقع المعتمدة بتتحفظ كتصحيح يدوي وما بتتغيرش لما ترفع الشيت تاني.
+  </div>
+  <div class="hint" id="rvmsg"></div>
+  <div class="row" id="rv_chips" style="gap:6px;margin-bottom:10px"></div>
+  <div class="scroll" style="max-height:380px"><table id="rv_t"></table></div>
+
+  <!-- لوحة مراجعة مركز واحد -->
+  <div id="rv_panel" hidden style="margin-top:14px;border-top:1px solid var(--line);padding-top:14px"></div>
+</div>
+
 <!-- Split View: Table & Map -->
 <div class="split" style="margin-top:20px">
   <div class="card" style="margin:0">
@@ -70,4 +92,5 @@
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/centers.js') }}"></script>
+<script src="{{ url_for('static', filename='js/centers_review.js') }}"></script>
 {% endblock %}

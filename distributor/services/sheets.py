@@ -87,6 +87,6 @@ def center_columns(C):
         "name": "Center Name" if "Center Name" in C.columns else None,
         "cap": engine._find(C, contains=["سعة", "سعه", "capacity"]),
         "lat": engine._find(C, names=engine.LAT), "lon": engine._find(C, names=engine.LON),
-        "addr": next((c for c in C.columns if "عنوان" in str(c) or str(c).lower() in ("address", "full_address")), None),
+        "addr": next((c for c in C.columns if "عنوان" in str(c) or "address" in str(c).lower()), None),
         "url": next((c for c in C.columns if C[c].astype(str).str.startswith("http").any()), None),
     }

@@ -66,7 +66,11 @@ def connect(path=None):
             con.executescript(SCHEMA)
             have = {r["name"] for r in con.execute("PRAGMA table_info(centers)")}
             for col, typ in (("link_name", "TEXT"), ("google_lat", "REAL"), ("google_lon", "REAL"), ("google_type", "TEXT"),
-                             ("google_addr", "TEXT"), ("google_gap_m", "REAL"), ("google_verdict", "TEXT"), ("google_at", "TEXT")):
+                             ("google_addr", "TEXT"), ("google_gap_m", "REAL"), ("google_verdict", "TEXT"), ("google_at", "TEXT"),
+                             # مراجعة المواقع: تقدير الموقع من العنوان (geocoder محلي) + قرار المستخدم + اللينك الصح
+                             ("addr_lat", "REAL"), ("addr_lon", "REAL"), ("addr_level", "TEXT"), ("addr_matched", "TEXT"),
+                             ("link_tried", "INTEGER"), ("review", "TEXT"), ("review_at", "TEXT"), ("review_by", "TEXT"),
+                             ("correct_url", "TEXT")):
                 if col not in have:                                                           # قاعدة قديمة
                     try:
                         con.execute(f"ALTER TABLE centers ADD COLUMN {col} {typ}")
@@ -226,7 +230,7 @@ def center_records(C):
     C.columns = [str(c).strip() for c in C.columns]
     lat_c = _find_col(C, lambda c: c.lower() in ("lat", "latitude", "خط العرض"))
     lon_c = _find_col(C, lambda c: c.lower() in ("lon", "lng", "long", "longitude", "خط الطول"))
-    addr_c = _find_col(C, lambda c: "عنوان" in c or c.lower() in ("address", "full_address"))
+    addr_c = _find_col(C, lambda c: "عنوان" in c or "address" in c.lower())
     url_c = next((c for c in C.columns if C[c].astype(str).str.startswith("http").any()), None)
     name_c = "Center Name" if "Center Name" in C.columns else None
     out = {}
@@ -290,6 +294,14 @@ def centers_upsert(C, source="sheet", con=None):
                 if lat is None:
                     rep["no_coords"] += 1
                 continue
+            if rec["url"] and rec["url"] != (row["gmaps_url"] or ""):
+                # لينك جديد: إحداثيات اللينك القديم ما بقتش تخصّه
+                con.execute("UPDATE centers SET link_lat=NULL, link_lon=NULL, link_diff_m=NULL, link_name=NULL, link_tried=NULL "
+                            "WHERE code=?", (rec["code"],))
+                rep.setdefault("link_changed", []).append(rec["code"])
+            if rec["address"] and rec["address"] != (row["address"] or "") or rec["area"] != (row["area"] or ""):
+                con.execute("UPDATE centers SET addr_lat=NULL, addr_lon=NULL, addr_level=NULL, addr_matched=NULL WHERE code=?",
+                            (rec["code"],))
             con.execute("UPDATE centers SET name=?, gov=?, area=?, address=COALESCE(NULLIF(?, ''), address), "
                         "gmaps_url=COALESCE(NULLIF(?, ''), gmaps_url) WHERE code=?",
                         (rec["name"], rec["gov"], rec["area"], rec["address"], rec["url"], rec["code"]))

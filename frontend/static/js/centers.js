@@ -10,7 +10,7 @@ async function status() {
   $("#kpis").innerHTML = k(n(s.centers_with_coords) + " / " + n(s.centers), "مراكز ليها موقع") + k(n(s.centers_verified), "مراكز متأكد منها", "ok") +
     k(n(s.overrides), "تصحيحات يدوية") + k(n(s.geo_cache), "عناوين محفوظة") + k(s.gazetteer ? s.gazetteer_mb + " ميجا" : "مش موجودة", "قاعدة الأماكن", s.gazetteer ? "" : "bad");
 }
-async function load() { const r = await api("/api/centers"); if (r.ok) { CENTERS = r.j; draw(); drawMap(); } }
+async function load() { const r = await api("/api/centers"); if (r.ok) { CENTERS = r.j; draw(); drawMap(); if (typeof reviewRender === "function") reviewRender(); } }
 function googleCell(c) {
   if (!c.google_verdict) return "";
   const v = c.google_verdict, review = ["differs", "approx_far", "conflict"].includes(v);

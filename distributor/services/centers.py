@@ -296,3 +296,214 @@ def verify_center_current(code, user="", run_id=""):
         con.close()
 
 
+# ---------------- مراجعة مواقع المراكز (لينك الشيت مقابل العنوان) ----------------
+# التقدير من العنوان بالـgeocoder المحلي دقته على حسب المستوى: كل ما المستوى أوسع، نسمح بمسافة أكبر قبل ما نقول «اللينك غلط»
+ADDR_TOLERANCE_KM = {"poi": 1.0, "street": 1.5, "locality": 3.0, "area": 5.0, "markaz": 10.0}
+REVIEW_LABELS = {
+    "confirmed": "متأكد (اتراجع)", "far": "اللينك بعيد عن العنوان", "link_unreadable": "اللينك مش بيتقري",
+    "no_link": "مفيش لينك", "vague": "العنوان مش كفاية للحكم", "ok": "اللينك قريب من العنوان", "pending": "لسه ما اتفحصش",
+}
+REVIEW_ORDER = ["far", "link_unreadable", "no_link", "vague", "pending", "ok", "confirmed"]
+
+
+def maps_link(lat, lon):
+    return f"https://www.google.com/maps?q={lat:.6f},{lon:.6f}"
+
+
+def _km(a, b, c, d):
+    return locdb.km(a, b, c, d)
+
+
+def review_state(c):
+    """حالة مراجعة موقع المركز من البيانات المحفوظة. c: صف من جدول centers (dict)."""
+    tol = ADDR_TOLERANCE_KM.get(c.get("addr_level"))
+    link = (c["link_lat"], c["link_lon"]) if c.get("link_lat") is not None else None
+    addr = (c["addr_lat"], c["addr_lon"]) if c.get("addr_lat") is not None else None
+    gap = round(_km(link[0], link[1], addr[0], addr[1]), 1) if link and addr else None
+    out = {"addr_gap_km": gap, "tolerance_km": tol}
+    if c.get("review") == "confirmed":
+        out["status"] = "confirmed"
+    elif not c.get("gmaps_url"):
+        out["status"] = "no_link"
+    elif not link:
+        out["status"] = "link_unreadable" if c.get("link_tried") else "pending"
+    elif not addr and c.get("addr_level") is None:
+        out["status"] = "pending"
+    elif not addr or tol is None:
+        out["status"] = "vague"
+    else:
+        out["status"] = "far" if gap > tol else "ok"
+    out["status_ar"] = REVIEW_LABELS[out["status"]]
+    return out
+
+
+def _geocoder():
+    gaz = locdb.find_gazetteer()
+    if not gaz:
+        return None
+    from distributor.core import geocoder as gc
+    return gc.Geocoder(gaz)
+
+
+def _addr_estimate(gz, c):
+    """تقدير موقع المركز من عنوانه. مستوى «محافظة» بس مش كفاية نحكم بيه على اللينك."""
+    if not gz or not c.get("address") or not c.get("gov"):
+        return {"lat": None, "lon": None, "level": "none", "matched": None}
+    res = gz.geocode(c["gov"], c.get("area") or "", c["address"], exclude_center=c["code"])
+    if not res or res.get("lat") is None or res.get("level") not in ADDR_TOLERANCE_KM:
+        return {"lat": None, "lon": None, "level": (res or {}).get("level") or "none", "matched": (res or {}).get("matched")}
+    return {"lat": res["lat"], "lon": res["lon"], "level": res["level"], "matched": res.get("matched")}
+
+
+def _review_locations(job):
+    """لكل مركز: يقرا لينك الشيت (لو لسه ما اتقراش)، يقدّر الموقع من العنوان، ويحدد الحالة.
+    المراكز اللي مالهاش موقع خالص بتاخد موقع اللينك (زي ما التوزيع بيعمل)."""
+    con = None
+    got_lock = googlegeo._running.acquire(blocking=False)
+    try:
+        if not got_lock:
+            raise RuntimeError("في فحص جوجل أو فحص لينكات شغال دلوقتي. استنى لما يخلص.")
+        con = db.connect()
+        gz = _geocoder()
+        rows = [dict(r) for r in con.execute("SELECT * FROM centers ORDER BY gov, code")]
+        need_net = sum(1 for r in rows if r.get("gmaps_url") and r.get("link_lat") is None and not r.get("link_tried"))
+        done_net = 0
+        for i, r in enumerate(rows):
+            if job.get("cancel"):
+                raise engine.JobCancelled()
+            job["progress"] = int(100 * i / max(len(rows), 1))
+            job["message"] = f"المركز {r['code']} ({i + 1} / {len(rows)})" + (
+                f" — قراءة لينكات Google: {done_net} / {need_net} (كل لينك ~{locdb.GMAPS_GAP} ثواني)" if need_net else "")
+            if r.get("gmaps_url") and r.get("link_lat") is None and not r.get("link_tried"):
+                used_net = locdb.parse_coords(r["gmaps_url"]) is None      # لينك فيه الإحداثيات نفسها: مفيش نت ولا انتظار
+                got = locdb.resolve_gmaps_ex(r["gmaps_url"])
+                done_net += 1
+                if got:
+                    diff = _km(r["lat"], r["lon"], got[0], got[1]) * 1000 if r.get("lat") is not None else None
+                    con.execute("UPDATE centers SET link_lat=?, link_lon=?, link_diff_m=?, link_name=?, link_tried=1 WHERE code=?",
+                                (got[0], got[1], diff, got[2], r["code"]))
+                    if r.get("lat") is None:
+                        con.execute("UPDATE centers SET lat=?, lon=?, source='gmaps_link', updated_at=? WHERE code=?",
+                                    (got[0], got[1], locdb.now(), r["code"]))
+                else:
+                    con.execute("UPDATE centers SET link_tried=1 WHERE code=?", (r["code"],))
+                con.commit()
+                if used_net and done_net < need_net:
+                    time.sleep(locdb.GMAPS_GAP)
+            if r.get("addr_level") is None:
+                est = _addr_estimate(gz, r)
+                con.execute("UPDATE centers SET addr_lat=?, addr_lon=?, addr_level=?, addr_matched=? WHERE code=?",
+                            (est["lat"], est["lon"], est["level"], est["matched"], r["code"]))
+                con.commit()
+        rows = [dict(r) for r in con.execute("SELECT * FROM centers")]
+        counts = {}
+        for r in rows:
+            st = review_state(r)["status"]
+            counts[st] = counts.get(st, 0) + 1
+        job["result"] = {"centers": len(rows), "counts": counts, "links_read": done_net, "gazetteer": gz is not None}
+    finally:
+        if con is not None:
+            con.close()
+        if got_lock:
+            googlegeo._running.release()
+
+
+def start_review_locations():
+    if googlegeo.running():
+        raise ValueError("في فحص شغال دلوقتي (جوجل أو لينكات). استنى لما يخلص.")
+    return jobs.submit("review_locations", _review_locations)
+
+
+def list_centers_review():
+    """المراكز + حالة المراجعة محسوبة."""
+    out = []
+    for c in list_centers():
+        c.update(review_state(c))
+        out.append(c)
+    return out
+
+
+def preview_location(code, text):
+    """معاينة لينك/إحداثيات قبل الحفظ: الموقع وبعده عن تقدير العنوان وعن لينك الشيت وعن الموقع الحالي. مفيش حفظ."""
+    con = db.connect()
+    try:
+        r = con.execute("SELECT * FROM centers WHERE code=?", (code,)).fetchone()
+        if not r:
+            raise KeyError(code)
+        c = dict(r)
+    finally:
+        con.close()
+    t = (text or "").strip()
+    got = locdb.parse_coords(t)
+    name = ""
+    if not got and t.startswith("http"):
+        ex = locdb.resolve_gmaps_ex(t)
+        if ex:
+            got, name = (ex[0], ex[1], ""), ex[2]
+    if not got:
+        raise ValueError("مش قادر أقرا موقع من اللي كتبته. الصق لينك Google Maps للمكان (أو إحداثيات زي 30.0444, 31.2357).")
+    lat, lon = got[0], got[1]
+
+    def d(a, b):
+        return round(_km(lat, lon, a, b), 2) if a is not None else None
+    return {"lat": lat, "lon": lon, "place_name": name, "url": t if t.startswith("http") else maps_link(lat, lon),
+            "from_address_km": d(c.get("addr_lat"), c.get("addr_lon")), "address_level": c.get("addr_level"),
+            "tolerance_km": ADDR_TOLERANCE_KM.get(c.get("addr_level")),
+            "from_link_km": d(c.get("link_lat"), c.get("link_lon")), "from_current_km": d(c.get("lat"), c.get("lon"))}
+
+
+def confirm_location(code, lat, lon, url="", how="", user=""):
+    """قرار المستخدم: الموقع ده هو الصح. بيتحفظ كتصحيح يدوي (الشيت ما بيغيّرهوش بعد كده) + اللينك الصح."""
+    lat, lon = float(lat), float(lon)
+    if not locdb.in_egypt(lat, lon):
+        raise ValueError("الموقع ده برّه مصر.")
+    res = apply_center_coords(code, lat, lon, source="manual", note=how or "مراجعة المواقع", user=user)
+    good = (url or "").strip() or maps_link(lat, lon)
+    con = db.connect()
+    try:
+        con.execute("UPDATE centers SET verified=1, review='confirmed', review_at=?, review_by=?, correct_url=? WHERE code=?",
+                    (locdb.now(), user or "", good, code))
+        con.commit()
+        db.audit(con, user, "center_review_confirm", code, {"lat": lat, "lon": lon, "url": good, "how": how})
+    finally:
+        con.close()
+    return {**res, "correct_url": good}
+
+
+def reopen_review(code, user=""):
+    con = db.connect()
+    try:
+        if not con.execute("SELECT 1 FROM centers WHERE code=?", (code,)).fetchone():
+            raise KeyError(code)
+        con.execute("UPDATE centers SET review=NULL, review_at=NULL WHERE code=?", (code,))
+        con.commit()
+        db.audit(con, user, "center_review_reopen", code, None)
+    finally:
+        con.close()
+    return {"ok": True}
+
+
+def master_xlsx():
+    """شيت المواقع المعتمدة بنفس أسماء أعمدة شيت المراكز (Center Code / Center Name / City / Area / Center Address / Location
+    / Latitude / Longitude) عشان ينفع يتستورد تاني أو يتنسخ في الشيت الأصلي + أعمدة المراجعة."""
+    import pandas as pd
+    rows = []
+    for c in sorted(list_centers_review(), key=lambda x: (REVIEW_ORDER.index(x["status"]), x.get("gov") or "", x["code"])):
+        good = c.get("correct_url") or (maps_link(c["lat"], c["lon"]) if c.get("lat") is not None else "")
+        rows.append({"Center Code": c["code"], "Center Name": c.get("name") or "", "City": c.get("gov") or "",
+                     "Area": c.get("area") or "", "Center Address": c.get("address") or "",
+                     "Location": good, "Latitude": c.get("lat"), "Longitude": c.get("lon"),
+                     "حالة المراجعة": c["status_ar"], "لينك الشيت": c.get("gmaps_url") or "",
+                     "بعد لينك الشيت عن العنوان (كم)": c.get("addr_gap_km"), "دقة تقدير العنوان": c.get("addr_level") or "",
+                     "مصدر الموقع": c.get("source") or "", "اتراجع بواسطة": c.get("review_by") or "",
+                     "تاريخ المراجعة": c.get("review_at") or ""})
+    out = io.BytesIO()
+    with pd.ExcelWriter(out, engine="xlsxwriter") as xw:
+        pd.DataFrame(rows).to_excel(xw, sheet_name="مواقع المراكز", index=False)
+        ws = xw.sheets["مواقع المراكز"]
+        ws.right_to_left()
+        ws.set_column(0, 4, 18)
+        ws.set_column(5, 5, 45)
+        ws.set_column(6, 14, 16)
+    out.seek(0)
+    return out

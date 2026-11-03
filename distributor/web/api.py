@@ -382,7 +382,54 @@ def planning_export(pid):
 # ---------------- المراكز ----------------
 @bp.route("/centers")
 def centers_list():
-    return jsonify(centers.list_centers())
+    return jsonify(centers.list_centers_review())
+
+
+# ---- مراجعة مواقع المراكز: لينك الشيت مقابل العنوان ----
+@bp.route("/centers/review_locations", methods=["POST"])
+def centers_review_locations():
+    try:
+        job = centers.start_review_locations()
+    except ValueError as e:
+        return jsonify(error=str(e)), 400
+    return jsonify(id=job["id"])
+
+
+@bp.route("/centers/<code>/preview", methods=["POST"])
+def center_preview(code):
+    d = _json() or {}
+    try:
+        return jsonify(centers.preview_location(code, d.get("input", "")))
+    except KeyError:
+        return jsonify(error="المركز مش موجود"), 404
+    except ValueError as e:
+        return jsonify(error=str(e)), 400
+
+
+@bp.route("/centers/<code>/confirm", methods=["POST"])
+def center_confirm(code):
+    d = _json() or {}
+    try:
+        return jsonify(centers.confirm_location(code, d.get("lat"), d.get("lon"), url=d.get("url", ""),
+                                                how=d.get("how", ""), user=_user()))
+    except KeyError:
+        return jsonify(error="المركز مش موجود"), 404
+    except (TypeError, ValueError) as e:
+        return jsonify(error=str(e) or "إحداثيات غلط"), 400
+
+
+@bp.route("/centers/<code>/reopen", methods=["POST"])
+def center_reopen(code):
+    try:
+        return jsonify(centers.reopen_review(code, user=_user()))
+    except KeyError:
+        return jsonify(error="المركز مش موجود"), 404
+
+
+@bp.route("/centers/master.xlsx")
+def centers_master_xlsx():
+    return send_file(centers.master_xlsx(), mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                     as_attachment=True, download_name="centers_locations_master.xlsx")
 
 
 @bp.route("/centers/<code>", methods=["POST"])
