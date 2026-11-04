@@ -141,13 +141,13 @@ def analyze(S_raw):
                                   .value_counts().head(10).to_dict()}
 
 
-def to_excel(rep, cap=None):
+def to_excel(rep, cap=None, mode=None):
     """تقرير Excel: ملخص، البنود، المحافظات، الليفيلات، ومصفوفة محافظة × ليفيل (+ الجروبات المطلوبة لو فيه سعة)."""
     lo = rep["levels_order"]
     gg = {g["gov_code"]: _gov_groups(g, cap) for g in rep["govs"]} if cap else {}
     lv_groups = {k: sum(x.get(k, 0) for x in gg.values()) for k in lo}
     total_groups = sum(lv_groups.values())
-    summary = pd.DataFrame(([("سعة الجروب", cap), ("إجمالي الجروبات المطلوبة", total_groups)] if cap else [])
+    summary = pd.DataFrame(([("نوع الجروبات", MODES.get(mode or "physical", "Physical")), ("سعة الجروب", cap), ("إجمالي الجروبات المطلوبة", total_groups)] if cap else [])
                            + [("إجمالي الطلاب", rep["total"]), ("عدد المحافظات", len(rep["govs"])),
                             ("عدد الليفيلات", len(rep["levels"])), ("محافظة غير معروفة", rep["unknown_gov"]),
                             ("ليفيل غير محدد", rep["unknown_level"])]
@@ -210,7 +210,10 @@ def total_groups(rep, cap):
     return sum(sum(_gov_groups(g, cap).values()) for g in rep["govs"])
 
 
-def save(rep, file_name, user, cap=None):
+MODES = {"physical": "Physical", "online": "Online"}
+
+
+def save(rep, file_name, user, cap=None, mode="physical"):
     """بيحفظ نتيجة التحليل (أرقام مجمّعة) + صفوف الطلاب اللي عندهم مشاكل في المنطقة بس (مش الشيت كله).
     الصفوف دي فيها الرقم القومي والعنوان عشان توصلهم وتصلّحهم، وبتتحفظ في data/ زي نتايج التوزيع."""
     flag_rows = rep.pop("_flags", [])
@@ -218,7 +221,8 @@ def save(rep, file_name, user, cap=None):
     con = db.connect()
     try:
         db.plan_insert(con, {"id": pid, "user": user, "name": file_name, "file_name": file_name,
-                             "n_students": rep["total"], "cap": cap, "report": rep, "flags": flag_rows})
+                             "n_students": rep["total"], "cap": cap, "mode": mode if mode in MODES else "physical",
+                             "report": rep, "flags": flag_rows})
     finally:
         con.close()
     return pid

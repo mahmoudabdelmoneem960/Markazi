@@ -33,6 +33,8 @@ async function init() {
     if (RUN.files && RUN.files.result) await loadResult();
   }
   loadRunsForCompare();
+  const stu = new URLSearchParams(location.search).get("student");   // جاي من البحث عن طالب
+  if (stu) viewStudentRow(RUN.id, stu);
   if (location.hash === "#map") tab("map");
   else if (location.hash === "#whatif") tab("whatif");
 }
@@ -1388,6 +1390,35 @@ async function fixAllSuspects() {
   await loadResult();
 }
 
+/* البحث عن طالب جوه التشغيل ده بالرقم القومي (أو كود الجروب) */
+async function runSearchStudent() {
+  const q = $("#rs_q").value.trim();
+  if (!q) { $("#rs_wrap").hidden = true; $("#rs_msg").textContent = ""; return; }
+  $("#rs_msg").className = "hint"; $("#rs_msg").textContent = "⏳ جاري البحث...";
+  const r = await api(`/api/runs/search_student?run=${encodeURIComponent(RUN.id)}&q=${encodeURIComponent(q)}`);
+  if (!r.ok) { $("#rs_msg").className = "hint bad"; $("#rs_msg").textContent = r.j.error || "فشل البحث"; $("#rs_wrap").hidden = true; return; }
+  const d = r.j;
+  $("#rs_msg").className = "hint" + (d.total ? "" : " bad");
+  $("#rs_msg").textContent = !d.total ? "مفيش طالب بالرقم ده في التشغيل ده."
+    : `${n(d.total)} نتيجة` + (d.shown < d.total ? ` (ظاهر أول ${n(d.shown)} — اكتب الرقم كامل عشان تضيّق)` : "");
+  $("#rs_wrap").hidden = !d.total;
+  table("#rs_t", [
+    ["nid", "الرقم القومي", v => `<b style="direction:ltr;unicode-bidi:embed">${esc(v)}</b>`],
+    ["row_no", "صف"],
+    ["gov", "المحافظة", (v, s) => esc(v) + (s.Area ? `<div class="small mute">${esc(s.Area)}</div>` : "")],
+    ["Level(25-26)", "الليفيل"],
+    ["status", "الحالة", v => `<span class="pill ${v === "VP" ? "bad" : "ok"}">${esc(v)}</span>`],
+    ["center_code", "المركز", (v, s) => v ? `<b>${esc(v)}</b><div class="small">${esc(s.center_name || "")}</div>`
+      : (s.nearest_center ? `<span class="mute">أقرب مركز: ${esc(s.nearest_center)}</span>` : "—")],
+    ["group_code", "الجروب", (v, s) => v ? `<b>${esc(v)}</b>` + ((s.day || s.time) ? `<div class="small mute">${esc([s.day, s.time].filter(Boolean).join(" · "))}</div>` : "") : "—"],
+    ["distance_km", "المسافة", v => v ? fmtKm(+v) : "—"],
+    ["row_no", "", (v, s) => `<div class="row" style="gap:4px;flex-wrap:nowrap">
+        <button class="btn sm" type="button" onclick="viewStudentRow(RUN.id, '${esc(v)}')">التفاصيل</button>` +
+      (s.lat && s.lon ? `<button class="btn sm sec" type="button" onclick="flyToStudent(${+s.lat}, ${+s.lon})" title="على الخريطة">📍</button>` : "") + `</div>`],
+  ], d.rows, {empty: ""});
+  if (d.total === 1 && d.rows[0].exact) viewStudentRow(RUN.id, d.rows[0].row_no);   // رقم قومي كامل = افتح بياناته على طول
+}
+
 function flyToStudent(lat, lon) {
   if (!lat || !lon) return;
   closeModal('modal_all_suspects');
@@ -1422,18 +1453,45 @@ function drawCenters() {
     $("#m_msg").textContent = "تحميل طلاب " + c.center_code + "...";
     const r = await api(`/api/runs/${RUN.id}/students?center=${encodeURIComponent(c.center_code)}`);
     if (!r.ok) { $("#m_msg").textContent = r.j.error || ""; return; }
-    if (pLayer) pLayer.remove(); pLayer = pointsLayer(MAP, r.j.points);
-    $("#m_msg").textContent = `${c.center_code}: ${n(r.j.total)} طالب${r.j.total > r.j.shown ? " (معروض " + n(r.j.shown) + ")" : ""}`;
+    if (pLayer) pLayer.remove();
+    if (linesLayer) { linesLayer.remove(); linesLayer = null; }
+    LINES_CENTER = {c, pts: r.j.points};
+    drawCenterLines();                       // الخطوط تحت النقط
+    pLayer = pointsLayer(MAP, r.j.points);
+    const ds = r.j.points.filter(p => p.s !== "VP" && p.d !== "" && p.d != null).map(p => +p.d).filter(v => !isNaN(v));
+    const vp = r.j.points.filter(p => p.s === "VP").length;
+    $("#m_msg").textContent = `${c.center_code}: ${n(r.j.total)} طالب${r.j.total > r.j.shown ? " (معروض " + n(r.j.shown) + ")" : ""}` +
+      (ds.length ? ` · متوسط المسافة ${fmtKm(ds.reduce((a, b) => a + b, 0) / ds.length)} · أبعد طالب ${fmtKm(Math.max(...ds))}` : "") +
+      (vp ? ` · ${n(vp)} VP أقرب مركز ليهم هو ده` : "");
   });
   fitTo(MAP, filtered());
 }
-function mapGov() { drawCenters(); if (pLayer) { pLayer.remove(); pLayer = null; } $("#m_msg").textContent = ""; if ($("#m_vp").checked) mapVP(); }
+/* خطوط من المركز المختار لكل طالب فيه (والـVP اللي أقرب مركز ليهم هو ده بخط أحمر متقطع) */
+let linesLayer = null, LINES_CENTER = null;
+function drawCenterLines() {
+  if (linesLayer) { linesLayer.remove(); linesLayer = null; }
+  if (!MAP || !LINES_CENTER || !$("#m_lines").checked) return;
+  const {c, pts} = LINES_CENTER;
+  if (c.lat == null || c.lon == null) return;
+  linesLayer = L.layerGroup().addTo(MAP);
+  pts.forEach(p => {
+    const vp = p.s === "VP";
+    L.polyline([[c.lat, c.lon], [p.lat, p.lon]], {color: vp ? "#d92d20" : "#2563eb", weight: 1.2, opacity: vp ? .55 : .45,
+      dashArray: vp ? "4 4" : null, interactive: false}).addTo(linesLayer);
+  });
+  if (pts.length) MAP.fitBounds(L.latLngBounds([[c.lat, c.lon], ...pts.map(p => [p.lat, p.lon])]).pad(0.1), {maxZoom: 15});
+}
+function toggleCenterLines() { drawCenterLines(); if (pLayer && linesLayer) { pLayer.remove(); pLayer.addTo(MAP); } }
+function clearCenterLines() { if (linesLayer) { linesLayer.remove(); linesLayer = null; } LINES_CENTER = null; }
+
+function mapGov() { drawCenters(); clearCenterLines(); if (pLayer) { pLayer.remove(); pLayer = null; } $("#m_msg").textContent = ""; if ($("#m_vp").checked) mapVP(); }
 async function mapVP() {
-  if (!$("#m_vp").checked) { if (pLayer) { pLayer.remove(); pLayer = null; } return; }
+  if (!$("#m_vp").checked) { clearCenterLines(); if (pLayer) { pLayer.remove(); pLayer = null; } return; }
   const g = $("#m_gov").value; if (!g) { $("#m_msg").textContent = "اختار محافظة الأول."; $("#m_vp").checked = false; return; }
   $("#m_msg").textContent = "تحميل الـVP...";
   const r = await api(`/api/runs/${RUN.id}/students?gov=${encodeURIComponent(g)}&status=vp&limit=8000`);
   if (!r.ok) { $("#m_msg").textContent = r.j.error || ""; return; }
+  clearCenterLines();
   if (pLayer) pLayer.remove(); pLayer = pointsLayer(MAP, r.j.points);
   $("#m_msg").textContent = `VP في ${govAr(g)}: ${n(r.j.total)}${r.j.total > r.j.shown ? " (معروض " + n(r.j.shown) + ")" : ""}`;
 }

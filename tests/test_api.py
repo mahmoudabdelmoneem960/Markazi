@@ -70,6 +70,20 @@ def test_full_run_flow(client, sample_files):
     assert pts["total"] > 100 and pts["points"][0]["lat"] > 20
     w = client.post(f"/api/runs/{run_id}/whatif", json={"center": "SMP_CAI_C01", "level": "L1", "capacity": 25, "groups": 1}).get_json()
     assert w["seats"] == 25 and 0 <= w["rescued"] <= 25
+    # البحث عن طالب بالرقم القومي / كود الجروب في كل التشغيلات
+    from distributor.services import runs as runs_svc
+    st = runs_svc.load_students(run_id)
+    nid = next(x for x in st["Student NID"] if len(x) == 14)
+    f = client.get("/api/runs/search_student?q=" + nid).get_json()
+    hit = next(x for x in f["rows"] if x["run_id"] == run_id)
+    assert hit["exact"] and hit["nid"] == nid and hit["row_no"]
+    assert client.get("/api/runs/search_student?q=12").status_code == 400
+    f = client.get(f"/api/runs/search_student?run={run_id}&q=" + nid).get_json()
+    assert f["rows"] and all(x["run_id"] == run_id for x in f["rows"])
+    assert client.get("/api/runs/search_student?run=nope&q=" + nid).get_json()["total"] == 0
+    gc = next(x for x in st["group_code"] if x)
+    f = client.get("/api/runs/search_student?q=" + gc.lower()).get_json()
+    assert f["total"] == int((st["group_code"] == gc).sum()) and all(x["group_code"] == gc for x in f["rows"])
     rv = client.get(f"/api/review?run={run_id}&min_n=1&limit=10").get_json()
     assert rv["run"] == run_id and rv["groups_total"] >= 0
     # نفس الشيت مرة تانية (الكاش) + مقارنة
@@ -173,7 +187,7 @@ def test_planning_analyze_history_and_export(client, sample_files):
     assert r.status_code == 200, r.get_json()
     res = r.get_json()
     pid, j = res["id"], res["report"]
-    assert res["cap"] == 25 and j["total"] > 0
+    assert res["cap"] == 25 and res["mode"] == "physical" and j["total"] > 0
     assert sum(g["students"] for g in j["govs"]) == j["total"]
     assert sum(b["students"] for b in j["bands"]) == j["total"]
     assert sum(lv["students"] for lv in j["levels"]) == j["total"]
@@ -196,7 +210,15 @@ def test_planning_analyze_history_and_export(client, sample_files):
     r = client.post(f"/api/planning/{pid}", json={"name": "شيت أكتوبر", "cap": 20})
     assert r.status_code == 200
     p = client.get(f"/api/planning/{pid}").get_json()
-    assert p["name"] == "شيت أكتوبر" and p["cap"] == 20
+    assert p["name"] == "شيت أكتوبر" and p["cap"] == 20 and p["mode"] == "physical"
+
+    # نوع الجروبات (Physical / Online)
+    assert client.post(f"/api/planning/{pid}", json={"mode": "online"}).get_json()["mode"] == "online"
+    assert client.get(f"/api/planning/{pid}").get_json()["mode"] == "online"
+    assert next(x for x in client.get("/api/planning/history").get_json() if x["id"] == pid)["mode"] == "online"
+    assert client.post(f"/api/planning/{pid}", json={"mode": "xyz"}).get_json()["mode"] == "physical"
+    sm = pd.read_excel(io.BytesIO(client.get(f"/api/planning/{pid}/export.xlsx?mode=online").data), sheet_name="ملخص")
+    assert "Online" in sm["القيمة"].astype(str).tolist()
 
     # Excel من التحليل المحفوظ (من غير رفع تاني)
     r = client.get(f"/api/planning/{pid}/export.xlsx?cap=25")

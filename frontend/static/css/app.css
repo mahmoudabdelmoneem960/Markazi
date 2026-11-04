@@ -229,6 +229,11 @@ nav.menu a.on {
   gap: 10px;
 }
 
+.mode-seg { display: flex; border: 1px solid var(--border, #d0d5dd); border-radius: 10px; overflow: hidden; }
+.mode-seg button { flex: 1; border: 0; background: transparent; color: inherit; padding: 8px 10px; cursor: pointer; font: inherit; font-weight: 600; }
+.mode-seg button + button { border-inline-start: 1px solid var(--border, #d0d5dd); }
+.mode-seg button.on { background: var(--brand, #6366f1); color: #fff; }
+
 .theme-toggle-btn {
   background: var(--soft);
   border: 1px solid var(--line);

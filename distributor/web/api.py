@@ -75,6 +75,15 @@ def runs_list():
     return jsonify(runs.list_runs())
 
 
+@bp.route("/runs/search_student")
+def runs_search_student():
+    """البحث عن طالب بالرقم القومي أو الكود في كل التشغيلات."""
+    try:
+        return jsonify(runs.search_student(request.args.get("q", ""), run_id=request.args.get("run") or None))
+    except ValueError as e:
+        return jsonify(error=str(e)), 400
+
+
 @bp.route("/runs/upload", methods=["POST"])
 def runs_upload():
     """الخطوة 1: رفع الشيتين → مسودة + فحص مسبق."""
@@ -299,6 +308,11 @@ def _cap(v):
     return v if 0 < v <= 500 else None
 
 
+def _mode(v):
+    v = str(v or "").strip().lower()
+    return v if v in planning.MODES else "physical"
+
+
 @bp.route("/planning/analyze", methods=["POST"])
 def planning_analyze():
     """رفع شيت الطلاب ← تحليل ← يتحفظ في الـ history."""
@@ -312,8 +326,9 @@ def planning_analyze():
     except Exception as e:  # noqa
         return jsonify(error=f"تعذر تحليل الشيت: {e}"), 400
     cap = _cap(request.form.get("cap"))
-    pid = planning.save(rep, sf.filename or "", _user(), cap)
-    return jsonify(id=pid, name=sf.filename, file_name=sf.filename, cap=cap, report=rep)
+    mode = _mode(request.form.get("mode"))
+    pid = planning.save(rep, sf.filename or "", _user(), cap, mode)
+    return jsonify(id=pid, name=sf.filename, file_name=sf.filename, cap=cap, mode=mode, report=rep)
 
 
 @bp.route("/planning/history")
@@ -336,6 +351,8 @@ def planning_item(pid):
             fields["name"] = str(d["name"] or "").strip()[:200] or p["file_name"]
         if "cap" in d:
             fields["cap"] = _cap(d["cap"])
+        if "mode" in d:
+            fields["mode"] = _mode(d["mode"])
         planning.update(pid, **fields)
         return jsonify(ok=True, **fields)
     return jsonify(p)
@@ -373,7 +390,8 @@ def planning_export(pid):
     if not p:
         return jsonify(error="التحليل ده مش موجود."), 404
     cap = _cap(request.args.get("cap")) or p.get("cap")
-    data = planning.to_excel(p["report"], cap)
+    mode = _mode(request.args.get("mode") or p.get("mode"))
+    data = planning.to_excel(p["report"], cap, mode)
     base = os.path.splitext(p.get("name") or p.get("file_name") or "planning")[0]
     return send_file(data, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                      as_attachment=True, download_name=f"planning_{base}.xlsx")

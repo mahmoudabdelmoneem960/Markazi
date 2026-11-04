@@ -20,6 +20,11 @@
       <div class="small" id="fname" style="margin-top:6px"></div>
     </div>
     <div style="display:flex;flex-direction:column;justify-content:center;gap:6px">
+      <label style="margin:0">🏷️ نوع الجروبات</label>
+      <div class="mode-seg" id="mode_seg" role="radiogroup">
+        <button type="button" data-mode="physical" role="radio" onclick="setMode('physical')">🏫 Physical</button>
+        <button type="button" data-mode="online" role="radio" onclick="setMode('online')">💻 Online</button>
+      </div>
       <label for="cap" style="margin:0">👥 سعة الجروب (عدد الطلاب في الجروب)</label>
       <input type="number" id="cap" min="1" max="500" step="1" value="25" oninput="onCap()">
       <div class="small mute">الجروب الواحد ليفيل واحد في محافظة واحدة، فعدد الجروبات بيتحسب لكل ليفيل في كل محافظة لوحده (تقريب لفوق).</div>

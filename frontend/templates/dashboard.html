@@ -17,6 +17,19 @@
 <!-- System Status KPIs -->
 <div class="kpis" id="kpis"></div>
 
+<!-- Student Search -->
+<div class="card" style="margin-top:20px;padding:22px">
+  <div class="card-header-clean" style="margin-bottom:12px">
+    <h2><span>🔎</span> البحث عن طالب</h2>
+  </div>
+  <form class="row" style="gap:10px" onsubmit="searchStudent();return false">
+    <input type="search" id="sq" class="inline" placeholder="الرقم القومي أو الكود (أو كود الجروب)..." style="min-width:320px;flex:1" autocomplete="off">
+    <button class="btn" type="submit">بحث</button>
+    <span class="hint" id="s_msg" style="margin:0"></span>
+  </form>
+  <div class="scroll" id="s_wrap" style="max-height:420px;margin-top:12px" hidden><table id="s_t"></table></div>
+</div>
+
 <!-- Runs Table Card -->
 <div class="card" style="margin-top:20px;padding:22px">
   <div class="card-header-clean" style="margin-bottom:18px">

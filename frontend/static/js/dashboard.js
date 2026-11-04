@@ -33,4 +33,30 @@ async function removeRun(id) {
   if (!r.ok) { toast(r.j.error || "فشل الحذف", "bad"); return; }
   toast("اتحذف", "ok"); load();
 }
+/* البحث عن طالب بالرقم القومي أو الكود في كل التشغيلات */
+async function searchStudent() {
+  const q = $("#sq").value.trim();
+  if (!q) { $("#s_wrap").hidden = true; $("#s_msg").textContent = ""; return; }
+  $("#s_msg").className = "hint"; $("#s_msg").textContent = "⏳ جاري البحث في كل التشغيلات...";
+  const r = await api("/api/runs/search_student?q=" + encodeURIComponent(q));
+  if (!r.ok) { $("#s_msg").className = "hint bad"; $("#s_msg").textContent = r.j.error || "فشل البحث"; $("#s_wrap").hidden = true; return; }
+  const d = r.j;
+  $("#s_msg").className = "hint" + (d.total ? "" : " bad");
+  $("#s_msg").textContent = !d.total ? "مفيش طالب بالرقم أو الكود ده في أي تشغيل."
+    : `${n(d.total)} نتيجة` + (d.shown < d.total ? ` (ظاهر أول ${n(d.shown)} — اكتب الرقم كامل عشان تضيّق)` : "");
+  $("#s_wrap").hidden = !d.total;
+  table("#s_t", [
+    ["nid", "الرقم القومي", (v, s) => `<b style="direction:ltr;unicode-bidi:embed">${esc(v)}</b>` + (s.code ? `<div class="small mute">كود: ${esc(s.code)}</div>` : "")],
+    ["run_name", "التشغيل", (v, s) => `<a href="/runs/${esc(s.run_id)}">${esc(v)}</a><div class="small mute">${esc(s.run_at)}</div>`],
+    ["row_no", "صف"],
+    ["gov", "المحافظة", (v, s) => esc(v) + (s.Area ? `<div class="small mute">${esc(s.Area)}</div>` : "")],
+    ["Level(25-26)", "الليفيل"],
+    ["status", "الحالة", v => `<span class="pill ${v === "VP" ? "bad" : "ok"}">${esc(v)}</span>`],
+    ["center_code", "المركز", (v, s) => v ? `<b>${esc(v)}</b><div class="small">${esc(s.center_name || "")}</div>`
+      : (s.nearest_center ? `<span class="mute">أقرب مركز: ${esc(s.nearest_center)}</span>` : "—")],
+    ["group_code", "الجروب", (v, s) => v ? `<b>${esc(v)}</b>` + ((s.day || s.time) ? `<div class="small mute">${esc([s.day, s.time].filter(Boolean).join(" · "))}</div>` : "") : "—"],
+    ["distance_km", "المسافة", v => v ? fmtKm(+v) : "—"],
+    ["run_id", "", (v, s) => `<a class="btn sec sm" href="/runs/${esc(v)}?student=${encodeURIComponent(s.row_no)}">فتح</a>`],
+  ], d.rows, {empty: "", rowAttr: s => (s.exact ? "" : 'style="opacity:.8"')});
+}
 load();

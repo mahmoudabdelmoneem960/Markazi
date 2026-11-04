@@ -944,3 +944,80 @@ def get_far_students_points(run_id, filter_type="all", limit=3000):
     }
 
 
+# ---------------- البحث عن طالب في كل التشغيلات ----------------
+_SEARCH_CACHE = {}          # run_id -> (mtime, size, DataFrame بالأعمدة اللي محتاجينها بس)
+_AR_DIGITS = str.maketrans("٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹", "01234567890123456789")
+_SYS_CODES = {"center_code", "group_code", "level_code", "gov_code", "nearest_center"}
+SEARCH_SHOW = ["row_no", "gov", "Area", "Adress", "Level(25-26)", "status", "center_code", "center_name", "center_area",
+               "group_code", "day", "time", "distance_km", "nearest_center", "note", "lat", "lon"]
+
+
+def _id_cols(cols):
+    """عمود الرقم القومي + أعمدة كود الطالب (أي عمود في الشيت اسمه فيه code / كود / id، غير أكواد السيستم)."""
+    nid = next((c for c in cols if c.strip().lower() in ("student nid", "nid")), None)
+    codes = [c for c in cols if c != nid and c not in _SYS_CODES and not c.startswith("_")
+             and re.search(r"code|كود|\bid\b|رقم الطالب", c, re.I)]
+    return nid, codes
+
+
+def _search_frame(run_id):
+    p = run_dir(run_id) / FILES["students"]
+    if not p.exists():
+        return None
+    st = p.stat()
+    hit = _SEARCH_CACHE.get(run_id)
+    if hit and hit[0] == st.st_mtime and hit[1] == st.st_size:
+        return hit[2]
+    df = load_students(run_id)
+    nid, codes = _id_cols(df.columns)
+    keep = [c for c in dict.fromkeys(([nid] if nid else []) + codes + SEARCH_SHOW) if c in df.columns]
+    df = df[keep].copy()
+    df.attrs["nid"], df.attrs["codes"] = nid, codes
+    for c in ([nid] if nid else []) + codes:
+        df["_k_" + c] = df[c].astype(str).str.translate(_AR_DIGITS).str.replace(r"\s+", "", regex=True).str.lower()
+    if "group_code" in df.columns:
+        df["_k_group"] = df["group_code"].astype(str).str.replace(r"\s+", "", regex=True).str.lower()
+    _SEARCH_CACHE[run_id] = (st.st_mtime, st.st_size, df)
+    return df
+
+
+def search_student(q, limit=100, run_id=None):
+    """بيدوّر على طالب بالرقم القومي أو كود الطالب (أو كود الجروب) في كل التشغيلات اللي ليها نتيجة.
+    رقم قومي كامل (14 رقم) أو كود = تطابق تام؛ أي جزء (4 حروف/أرقام على الأقل) = بحث جزئي."""
+    key = re.sub(r"\s+", "", str(q or "").translate(_AR_DIGITS)).lower()
+    if len(key) < 4:
+        raise ValueError("اكتب 4 أرقام/حروف على الأقل من الرقم القومي أو الكود.")
+    rows, total = [], 0
+    for run in list_runs():
+        if run_id and run["id"] != run_id:      # البحث جوه تشغيل واحد بس
+            continue
+        try:
+            df = _search_frame(run["id"])
+        except Exception:  # noqa — ملف تالف ما يوقفش البحث
+            df = None
+        if df is None or df.empty:
+            continue
+        nid, codes = df.attrs.get("nid"), df.attrs.get("codes", [])
+        cols = ([nid] if nid else []) + codes
+        exact = pd.Series(False, index=df.index)
+        part = pd.Series(False, index=df.index)
+        for c in cols:
+            k = df["_k_" + c]
+            exact |= k == key
+            part |= k.str.contains(key, regex=False)
+        if "_k_group" in df.columns:            # كود الجروب: تطابق تام بس (يطلع كل طلاب الجروب)
+            exact |= df["_k_group"] == key
+        m = exact | part
+        n = int(m.sum())
+        if not n:
+            continue
+        total += n
+        sub = df[m].assign(_exact=exact[m]).sort_values("_exact", ascending=False)
+        for _, r in sub.head(max(0, limit - len(rows))).iterrows():
+            d = {c: r[c] for c in SEARCH_SHOW if c in df.columns}
+            d.update({"run_id": run["id"], "run_name": run.get("name") or run.get("students_file") or run["id"],
+                      "run_at": run.get("created_at") or "", "nid": r[nid] if nid else "",
+                      "code": next((r[c] for c in codes if r[c]), ""), "exact": bool(r["_exact"])})
+            rows.append(d)
+    rows.sort(key=lambda d: not d["exact"])
+    return {"q": q, "total": total, "shown": len(rows), "rows": rows}

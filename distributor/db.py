@@ -37,6 +37,8 @@ def connect():
         con.executescript(APP_SCHEMA)
         if "flags" not in {r[1] for r in con.execute("PRAGMA table_info(plans)")}:
             con.execute("ALTER TABLE plans ADD COLUMN flags TEXT")   # صفوف الطلاب اللي عندهم مشاكل في المنطقة (التخطيط)
+        if "mode" not in {r[1] for r in con.execute("PRAGMA table_info(plans)")}:
+            con.execute("ALTER TABLE plans ADD COLUMN mode TEXT")    # نوع الجروبات: physical / online
         con.commit()
     return con
 
@@ -152,19 +154,19 @@ def jobs_mark_stale(con):
 
 
 # ---------------- التخطيط (history) ----------------
-_PLAN_COLS = "id, created_at, user, name, file_name, n_students, cap, report"  # flags كبيرة: بتتقري لوحدها
+_PLAN_COLS = "id, created_at, user, name, file_name, n_students, cap, mode, report"  # flags كبيرة: بتتقري لوحدها
 
 def plan_insert(con, plan):
     with locdb._lock:
-        con.execute("INSERT INTO plans(id, created_at, user, name, file_name, n_students, cap, report, flags) VALUES (?,?,?,?,?,?,?,?,?)",
+        con.execute("INSERT INTO plans(id, created_at, user, name, file_name, n_students, cap, mode, report, flags) VALUES (?,?,?,?,?,?,?,?,?,?)",
                     (plan["id"], now(), plan.get("user", ""), plan.get("name", ""), plan.get("file_name", ""),
-                     plan.get("n_students", 0), plan.get("cap"), json.dumps(plan["report"], ensure_ascii=False),
+                     plan.get("n_students", 0), plan.get("cap"), plan.get("mode") or "physical", json.dumps(plan["report"], ensure_ascii=False),
                      json.dumps(plan.get("flags") or [], ensure_ascii=False)))
         con.commit()
 
 
 def plan_update(con, plan_id, **fields):
-    fields = {k: v for k, v in fields.items() if k in ("name", "cap")}
+    fields = {k: v for k, v in fields.items() if k in ("name", "cap", "mode")}
     if not fields:
         return
     with locdb._lock:

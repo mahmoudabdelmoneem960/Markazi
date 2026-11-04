@@ -42,6 +42,16 @@
 </div>
 
 <div id="out" hidden class="fade-in">
+  <!-- البحث عن طالب جوه التشغيل -->
+  <div class="card" style="padding:14px 18px;margin-bottom:14px">
+    <form class="row" style="gap:10px" onsubmit="runSearchStudent();return false">
+      <input type="search" id="rs_q" class="inline" placeholder="🔍 دوّر على طالب بالرقم القومي أو كود الجروب..." style="min-width:320px;flex:1" autocomplete="off" oninput="if(!this.value.trim())runSearchStudent()">
+      <button class="btn sm" type="submit">بحث</button>
+      <span class="hint" id="rs_msg" style="margin:0"></span>
+    </form>
+    <div class="scroll" id="rs_wrap" style="max-height:360px;margin-top:10px" hidden><table id="rs_t"></table></div>
+  </div>
+
   <div class="tabs">
     <button class="on" data-tab="sum" onclick="tab('sum')">📊 لوحة المؤشرات والتحليلات</button>
     <button data-tab="map" onclick="tab('map')">🗺️ الخريطة التفاعلية والطلاب</button>
@@ -271,6 +281,7 @@
       <div class="row" style="align-items:center;flex-wrap:wrap;gap:8px">
         <select id="m_gov" class="inline" onchange="mapGov()"><option value="">كل المحافظات</option></select>
         <label style="margin:0"><input type="checkbox" id="m_vp" onchange="mapVP()"> عرض طلاب الـVP في المحافظة المختارة</label>
+        <label style="margin:0" title="لما تدوس على مركز: خط من المركز لكل طالب فيه"><input type="checkbox" id="m_lines" checked onchange="toggleCenterLines()"> خطوط المركز ← طلابه</label>
         <button class="btn sm" id="btn_map_far" onclick="toggleMapFarStudents()" style="background:#e08a1e;border-color:#c2781a">📍 الطلاب الأبعد من 50 كم (<span id="m_far_cnt">501</span>)</button>
         <button class="btn sm sec" id="btn_toggle_far_lines" onclick="toggleFarLines()" style="display:none">📏 إظهار/إخفاء خطوط المسافات</button>
         <button class="btn sm sec" id="btn_open_far_modal" onclick="openFarStudentsModal('gov')">📋 جدول الطلاب والمسافات</button>
@@ -286,6 +297,10 @@
         <span><i class="s-dot" style="background:#16794c"></i> طالب مسكّن</span>
         <span><i class="s-dot" style="background:#d92d20"></i> طالب VP</span>
         <span><i class="s-dot" style="background:#e08a1e"></i> طالب &gt; 50 كم</span>
+        <span class="sep"></span>
+        <span class="legend-title">📏 خطوط المركز:</span>
+        <span><i class="s-dot" style="background:#2563eb"></i> طالب في المركز</span>
+        <span><i class="s-dot" style="background:#d92d20"></i> VP أقرب مركز ليه هو ده (متقطع)</span>
       </div>
       <div id="map" class="map"></div>
       <div class="hint">اضغط على أي طالب أبعد من 50 كم لعرض أقرب مركز متاح، المسافة، وزر رسم الخط المباشر بينهما.</div>

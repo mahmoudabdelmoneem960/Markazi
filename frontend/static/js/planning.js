@@ -1,5 +1,6 @@
 /* صفحة التخطيط: رفع شيت الطلاب + سعة الجروب ← العدد والبنود والمحافظات والليفيلات والجروبات المطلوبة */
-let FILE = null, REP = null, CUR = null, HIST = [];
+let FILE = null, REP = null, CUR = null, HIST = [], MODE = "physical";
+const MODES = {physical: "Physical", online: "Online"};
 const B1 = "البند الأول", B2 = "البند الثاني", B3 = "البند الثالث", UNK_GOV = "غير معروفة", UNK_LV = "غير محدد";
 
 (function setupDrop() {
@@ -10,7 +11,10 @@ const B1 = "البند الأول", B2 = "البند الثاني", B3 = "الب
     const f = ev.dataTransfer && ev.dataTransfer.files[0];
     if (f) { FILE = f; analyze(); }
   });
-  try { const c = localStorage.getItem("markazi_plan_cap"); if (c) $("#cap").value = c; } catch (e) { /* ignore */ }
+  let m = "physical";
+  try { m = localStorage.getItem("markazi_plan_mode") || m; } catch (e) { /* ignore */ }
+  paintMode(m in MODES ? m : "physical");
+  const c = savedCap(MODE); if (c) $("#cap").value = c;
 })();
 
 function onPick() {
@@ -18,11 +22,33 @@ function onPick() {
   if (f) { FILE = f; analyze(); }
 }
 
+/* نوع الجروبات: Physical / Online — كل نوع ليه سعته المحفوظة */
+const modePill = m => `<span class="pill ${m === "online" ? "ok" : "brand"}">${m === "online" ? "💻 Online" : "🏫 Physical"}</span>`;
+function savedCap(m) {
+  try { return localStorage.getItem("markazi_plan_cap_" + m) || (m === "physical" ? localStorage.getItem("markazi_plan_cap") : null); }
+  catch (e) { return null; }
+}
+function paintMode(m) {
+  MODE = m;
+  $$("#mode_seg button").forEach(b => { const on = b.dataset.mode === m; b.classList.toggle("on", on); b.setAttribute("aria-checked", on); });
+}
+function setMode(m) {
+  if (!(m in MODES) || m === MODE) return;
+  paintMode(m);
+  try { localStorage.setItem("markazi_plan_mode", m); } catch (e) { /* ignore */ }
+  const c = savedCap(m); if (c) $("#cap").value = c;
+  if (!REP) return;
+  render(); setCurrentMeta();
+  // النوع بيتحفظ مع التحليل في السجل
+  if (CUR) postJSON(`/api/planning/${CUR.id}`, {mode: m, ...(cap() ? {cap: cap()} : {})})
+    .then(r => { if (r.ok) { CUR.mode = m; if (cap()) CUR.cap = cap(); loadHistory(); } });
+}
+
 /* سعة الجروب: أي تغيير بيعيد الحساب فورًا من غير رفع تاني */
 function cap() { const v = parseInt($("#cap").value, 10); return v > 0 ? v : 0; }
 let _capT = null;
 function onCap() {
-  try { localStorage.setItem("markazi_plan_cap", $("#cap").value); } catch (e) { /* ignore */ }
+  try { localStorage.setItem("markazi_plan_cap_" + MODE, $("#cap").value); } catch (e) { /* ignore */ }
   if (!REP) return;
   render(); setCurrentMeta();
   // السعة بتتحفظ مع التحليل في السجل
@@ -48,7 +74,7 @@ async function analyze() {
   $("#fname").textContent = "📄 " + FILE.name;
   $("#msg").className = "hint"; $("#msg").textContent = "⏳ جاري قراءة الشيت وتحليله...";
   $("#xl").hidden = true;
-  const fd = new FormData(); fd.append("students", FILE); if (cap()) fd.append("cap", String(cap()));
+  const fd = new FormData(); fd.append("students", FILE); if (cap()) fd.append("cap", String(cap())); fd.append("mode", MODE);
   const r = await api("/api/planning/analyze", {method: "POST", body: fd});
   if (!r.ok) {
     $("#msg").className = "hint bad"; $("#msg").textContent = r.j.error || "فشل التحليل";
@@ -62,10 +88,11 @@ async function analyze() {
 
 /* عرض تحليل (جديد أو من السجل) */
 function show(p) {
-  CUR = {id: p.id, name: p.name || p.file_name, file_name: p.file_name, cap: p.cap, created_at: p.created_at, user: p.user};
+  CUR = {id: p.id, name: p.name || p.file_name, file_name: p.file_name, cap: p.cap, mode: p.mode || "physical", created_at: p.created_at, user: p.user};
   REP = p.report;
   OPEN_AREAS.clear();
   Object.assign(RV, {kind: "", gov: "", conf: "", area: null, q: "", page: 1}); $("#rv_q").value = "";
+  paintMode(CUR.mode in MODES ? CUR.mode : "physical");
   if (p.cap) $("#cap").value = p.cap;
   history.replaceState(null, "", "/planning?id=" + encodeURIComponent(p.id));
   setCurrentMeta();
@@ -76,9 +103,9 @@ function show(p) {
 function setCurrentMeta() {
   if (!CUR) return;
   $("#cur_name").textContent = CUR.name || "";
-  $("#cur_meta").textContent = [CUR.created_at, CUR.user, CUR.file_name !== CUR.name ? CUR.file_name : ""].filter(Boolean).join(" · ");
+  $("#cur_meta").innerHTML = modePill(MODE) + " " + esc([CUR.created_at, CUR.user, CUR.file_name !== CUR.name ? CUR.file_name : ""].filter(Boolean).join(" · "));
   $("#xl").hidden = false;
-  $("#xl").href = `/api/planning/${encodeURIComponent(CUR.id)}/export.xlsx` + (cap() ? "?cap=" + cap() : "");
+  $("#xl").href = `/api/planning/${encodeURIComponent(CUR.id)}/export.xlsx` + "?mode=" + MODE + (cap() ? "&cap=" + cap() : "");
 }
 
 async function openPlan(id) {
@@ -125,6 +152,7 @@ function renderHistory() {
       (h.file_name && h.file_name !== v ? `<div class="small mute">${esc(h.file_name)}</div>` : "")],
     ["n_students", "الطلاب"], ["n_govs", "محافظات"], ["n_levels", "ليفيلات"],
     ["band2", "بند ثاني", v => v ? `<span class="pill warn">${n(v)}</span>` : `<span class="mute">0</span>`],
+    ["mode", "النوع", v => modePill(v || "physical")],
     ["cap", "السعة", v => v ? n(v) : "—"], ["groups", "الجروبات", v => v == null ? "—" : `<b>${n(v)}</b>`],
     ["user", "بواسطة"],
     ["id", "", v => `<div class="row" style="gap:4px;flex-wrap:nowrap">
