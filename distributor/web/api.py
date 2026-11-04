@@ -426,6 +426,36 @@ def center_reopen(code):
         return jsonify(error="المركز مش موجود"), 404
 
 
+@bp.route("/centers/issues")
+def centers_issues():
+    """المراكز اللي موقعها هو موقع مركز تاني."""
+    return jsonify(centers.center_issues())
+
+
+@bp.route("/centers/issues.xlsx")
+def centers_issues_xlsx():
+    return send_file(centers.center_issues_xlsx(), mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                     as_attachment=True, download_name="centers_to_fix.xlsx")
+
+
+@bp.route("/centers/<code>/same_place", methods=["POST"])
+def center_same_place(code):
+    d = _json() or {}
+    try:
+        return jsonify(centers.mark_same_place(code, str(d.get("other") or ""), user=_user()))
+    except KeyError:
+        return jsonify(error="المركز مش موجود"), 404
+
+
+@bp.route("/centers/<code>/edit", methods=["POST"])
+def center_edit(code):
+    d = _json() or {}
+    try:
+        return jsonify(centers.edit_center(code, address=d.get("address"), user=_user()))
+    except KeyError:
+        return jsonify(error="المركز مش موجود"), 404
+
+
 @bp.route("/centers/master.xlsx")
 def centers_master_xlsx():
     return send_file(centers.master_xlsx(), mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

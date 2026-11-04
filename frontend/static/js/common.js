@@ -61,10 +61,10 @@ function table(el, cols, rows, opts = {}) {
 }
 
 let _toastT = null;
-function toast(msg, cls) {
+function toast(msg, cls, ms) {
   let t = $(".toast"); if (!t) { t = document.createElement("div"); t.className = "toast"; document.body.appendChild(t); }
   t.textContent = msg; t.style.background = cls === "bad" ? "var(--bad)" : cls === "ok" ? "var(--ok)" : "var(--ink)"; t.hidden = false;
-  clearTimeout(_toastT); _toastT = setTimeout(() => { t.hidden = true; }, 4000);
+  clearTimeout(_toastT); _toastT = setTimeout(() => { t.hidden = true; }, ms || 4000);
 }
 
 /* متابعة مهمة في الخلفية: onTick(job) كل ثانية ونص، onDone(job) عند الانتهاء، onError(job|{error}) */

@@ -41,6 +41,9 @@ def set_center(code, text, note=None, user="", run_id=""):
             con.commit()
             flags = parts
         db.audit(con, user, "center_set", code, {"lat": lat, "lon": lon, "note": note or n})
+        con.execute("UPDATE centers SET verified=1, review='confirmed', review_at=?, review_by=?, correct_url=? WHERE code=?",
+                    (locdb.now(), user or "", maps_link(lat, lon), code))
+        con.commit()
         _clean_center_from_run(run_id, code)
         return {"ok": True, "lat": lat, "lon": lon, "flags": flags}
     finally:
@@ -300,10 +303,10 @@ def verify_center_current(code, user="", run_id=""):
 # التقدير من العنوان بالـgeocoder المحلي دقته على حسب المستوى: كل ما المستوى أوسع، نسمح بمسافة أكبر قبل ما نقول «اللينك غلط»
 ADDR_TOLERANCE_KM = {"poi": 1.0, "street": 1.5, "locality": 3.0, "area": 5.0, "markaz": 10.0}
 REVIEW_LABELS = {
-    "confirmed": "متأكد (اتراجع)", "far": "اللينك بعيد عن العنوان", "link_unreadable": "اللينك مش بيتقري",
+    "confirmed": "متأكد (اتراجع)", "recheck": "محتاج مراجعة يدوية", "far": "اللينك بعيد عن العنوان", "link_unreadable": "اللينك مش بيتقري",
     "no_link": "مفيش لينك", "vague": "العنوان مش كفاية للحكم", "ok": "اللينك قريب من العنوان", "pending": "لسه ما اتفحصش",
 }
-REVIEW_ORDER = ["far", "link_unreadable", "no_link", "vague", "pending", "ok", "confirmed"]
+REVIEW_ORDER = ["recheck", "far", "link_unreadable", "no_link", "vague", "pending", "ok", "confirmed"]
 
 
 def maps_link(lat, lon):
@@ -323,6 +326,8 @@ def review_state(c):
     out = {"addr_gap_km": gap, "tolerance_km": tol}
     if c.get("review") == "confirmed":
         out["status"] = "confirmed"
+    elif c.get("review") == "recheck":                 # اترجع للمراجعة بإيد المستخدم: يفضل في القايمة لحد ما يتحسم
+        out["status"] = "recheck"
     elif not c.get("gmaps_url"):
         out["status"] = "no_link"
     elif not link:
@@ -475,7 +480,7 @@ def reopen_review(code, user=""):
     try:
         if not con.execute("SELECT 1 FROM centers WHERE code=?", (code,)).fetchone():
             raise KeyError(code)
-        con.execute("UPDATE centers SET review=NULL, review_at=NULL WHERE code=?", (code,))
+        con.execute("UPDATE centers SET review='recheck', review_at=? WHERE code=?", (locdb.now(), code))
         con.commit()
         db.audit(con, user, "center_review_reopen", code, None)
     finally:
@@ -507,3 +512,101 @@ def master_xlsx():
         ws.set_column(6, 14, 16)
     out.seek(0)
     return out
+
+
+# ---------------- مراكز محطوط لها موقع مركز تاني ----------------
+DUP_KM = 0.03      # أقل من 30 متر = نفس المكان (اللينكات المختلفة لنفس المبنى بتفرق أمتار قليلة)
+
+
+def _same_name(a, b):
+    """مركزين بنفس الاسم = نفس المبنى بكودين (مش غلط)."""
+    from distributor.core import engine
+    na, nb = engine.norm_ar(a.get("name") or ""), engine.norm_ar(b.get("name") or "")
+    return bool(na) and na == nb
+
+
+def _dup_ok(r):
+    return {x for x in (r.get("dup_ok") or "").split(",") if x}
+
+
+def center_issues():
+    """المراكز اللي موقعها هو موقع مركز تاني (غالبًا لينك مركز اتلصق لمركز تاني).
+    مستثنى: نفس الاسم (نفس المبنى بكودين)، والأزواج اللي المستخدم أكّد إنها نفس المبنى فعلاً."""
+    con = db.connect()
+    try:
+        rows = [dict(r) for r in con.execute("SELECT * FROM centers WHERE lat IS NOT NULL ORDER BY gov, code")]
+    finally:
+        con.close()
+    out = []
+    for r in rows:
+        others = []
+        for o in rows:
+            if o["code"] == r["code"] or abs(o["lat"] - r["lat"]) > 0.001 or abs(o["lon"] - r["lon"]) > 0.001:
+                continue
+            d = _km(r["lat"], r["lon"], o["lat"], o["lon"])
+            if d < DUP_KM and not _same_name(r, o) and o["code"] not in _dup_ok(r):
+                others.append({"code": o["code"], "name": o.get("name") or "", "area": o.get("area") or "", "m": round(d * 1000)})
+        if others:
+            text = "؛ ".join(f"{o['code']} ({o['name']} — {o['area']})" + (f" على بعد {o['m']} م" if o["m"] else " نفس الإحداثيات بالظبط")
+                            for o in others)
+            out.append({"code": r["code"], "name": r.get("name") or "", "gov": r.get("gov") or "", "area": r.get("area") or "",
+                        "address": r.get("address") or "", "lat": r["lat"], "lon": r["lon"],
+                        "correct_url": r.get("correct_url") or "", "others": others,
+                        "diff_area": any(o["area"] != (r.get("area") or "") for o in others),
+                        "text": f"موقعه هو موقع: {text}"})
+    out.sort(key=lambda x: (not x["diff_area"], x["gov"], x["code"]))
+    return {"centers": out, "total": len(rows), "count": len(out)}
+
+
+def center_issues_xlsx():
+    import pandas as pd
+    rows = [{"Center Code": c["code"], "Center Name": c["name"], "City": c["gov"], "Area": c["area"],
+             "Center Address": c["address"], "موقعه هو موقع": "، ".join(o["code"] for o in c["others"]),
+             "التفاصيل": c["text"], "منطقة مختلفة": "أيوه" if c["diff_area"] else "",
+             "الموقع الحالي": c["correct_url"]} for c in center_issues()["centers"]]
+    out = io.BytesIO()
+    with pd.ExcelWriter(out, engine="xlsxwriter") as xw:
+        pd.DataFrame(rows).to_excel(xw, sheet_name="مراكز بموقع مركز تاني", index=False)
+        ws = xw.sheets["مراكز بموقع مركز تاني"]
+        ws.right_to_left()
+        ws.set_column(0, 5, 18)
+        ws.set_column(6, 6, 70, xw.book.add_format({"text_wrap": True, "valign": "top"}))
+        ws.set_column(7, 8, 20)
+    out.seek(0)
+    return out
+
+
+def mark_same_place(code, other, user=""):
+    """المستخدم أكّد إن المركزين دول في نفس المكان فعلاً (نفس المبنى): يخرجوا من القايمة."""
+    con = db.connect()
+    try:
+        rows = {r["code"]: dict(r) for r in con.execute("SELECT code, dup_ok FROM centers WHERE code IN (?, ?)", (code, other))}
+        if code not in rows or other not in rows or code == other:
+            raise KeyError(code if code not in rows else other)
+        for a, b in ((code, other), (other, code)):
+            ok = _dup_ok(rows[a]) | {b}
+            con.execute("UPDATE centers SET dup_ok=? WHERE code=?", (",".join(sorted(ok)), a))
+        con.commit()
+        db.audit(con, user, "center_same_place", code, {"other": other})
+    finally:
+        con.close()
+    return {"ok": True}
+
+
+def edit_center(code, address=None, user=""):
+    """تعديل بيانات المركز من السيستم (العنوان). العنوان المعدّل ما يتغيرش لما الشيت يترفع تاني."""
+    con = db.connect()
+    try:
+        r = con.execute("SELECT address FROM centers WHERE code=?", (code,)).fetchone()
+        if not r:
+            raise KeyError(code)
+        if address is not None:
+            address = str(address).strip()
+            if address != (r["address"] or ""):
+                con.execute("UPDATE centers SET address=?, addr_manual=1, addr_lat=NULL, addr_lon=NULL, addr_level=NULL, "
+                            "addr_matched=NULL WHERE code=?", (address, code))
+                con.commit()
+                db.audit(con, user, "center_edit", code, {"address": address, "old": r["address"]})
+        return {"ok": True}
+    finally:
+        con.close()

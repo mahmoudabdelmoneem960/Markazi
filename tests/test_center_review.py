@@ -16,6 +16,13 @@ def test_center_address_column_is_read():
     assert rec["address"].startswith("شارع الفلكي") and rec["area"] == "وسط البلد" and rec["url"].startswith("https://")
 
 
+def test_shared_pin_link_formats():
+    # لينك دبوس متشارك من Google Maps (اللينك المختصر بيحوّل للشكل ده)
+    assert locdb.parse_coords("https://www.google.com/maps/search/31.216831,+29.929837?entry=tts&g_ep=x", strict=True)[:2] == (31.216831, 29.929837)
+    assert locdb.parse_coords("https://www.google.com/maps/place/30.0444,31.2357/@30.04,31.23,17z", strict=True)[:2] == (30.0444, 31.2357)
+    assert locdb.parse_coords("https://www.google.com/maps/search/مدرسة+السينما", strict=True) is None   # بحث بالاسم: مفيش إحداثيات
+
+
 def test_review_state_rules():
     base = {"gmaps_url": "https://x", "link_lat": 30.0, "link_lon": 31.0, "addr_lat": 30.0, "addr_lon": 31.0,
             "addr_level": "street", "link_tried": 1, "review": None}
@@ -27,6 +34,7 @@ def test_review_state_rules():
     assert cs.review_state({**base, "link_lat": None, "link_tried": None})["status"] == "pending"
     assert cs.review_state({**base, "gmaps_url": ""})["status"] == "no_link"
     assert cs.review_state({**base, "addr_lat": 30.5, "review": "confirmed"})["status"] == "confirmed"
+    assert cs.review_state({**base, "review": "recheck"})["status"] == "recheck"           # حتى لو اللينك قريب
 
 
 def _wait(client, jid, timeout=120):
@@ -104,5 +112,43 @@ def test_review_flow(client):
     # رجوع للمراجعة
     assert client.post("/api/centers/TRV_2/reopen").status_code == 200
     c = next(c for c in client.get("/api/centers").get_json() if c["code"] == "TRV_2")
-    assert c["status"] != "confirmed" and c["source"] == "manual"
+    assert c["status"] == "recheck" and c["source"] == "manual"   # بيظهر في «محتاج مراجعة» لحد ما يتحسم
     assert client.post("/api/centers/NOPE/reopen").status_code == 404
+
+
+def test_issues_and_edit(client):
+    # TFX_1/TFX_2: مركزين مختلفين بنفس الموقع تقريبًا (13 م) · TFX_4: نفس اسم TFX_1 (نفس المبنى بكودين) · TFX_3: لوحده
+    _upload(client, [
+        ("L1_9101", "cairo", "مركز أ", "TFX_1", "مدينة نصر", "شارع عباس العقاد، مدينة نصر", "https://www.google.com/maps?q=30.0600,31.3300"),
+        ("L1_9102", "cairo", "مركز ب", "TFX_2", "حلوان", "شارع منصور، حلوان", "https://www.google.com/maps?q=30.0600,31.3300"),
+        ("L1_9103", "cairo", "مركز ج", "TFX_3", "وسط البلد", "شارع الفلكي، عابدين", ""),
+        ("L1_9104", "cairo", "مركز أ", "TFX_4", "مدينة نصر", "شارع عباس العقاد، مدينة نصر", ""),
+    ])
+    for code, inp in (("TFX_1", "30.0600, 31.3300"), ("TFX_2", "30.06012, 31.33000"), ("TFX_3", "30.1111, 31.2222"),
+                      ("TFX_4", "30.0600, 31.3300")):
+        r = client.post(f"/api/centers/{code}", json={"input": inp})       # تعديل من الخريطة/خانة اللصق
+        assert r.status_code == 200, r.get_json()
+    by = {c["code"]: c for c in client.get("/api/centers").get_json()}
+    assert by["TFX_1"]["status"] == "confirmed" and by["TFX_1"]["correct_url"].startswith("https://www.google.com/maps?q=30.06")
+
+    d = client.get("/api/centers/issues").get_json()
+    fx = {c["code"]: {o["code"] for o in c["others"]} for c in d["centers"]}
+    assert fx.get("TFX_1") == {"TFX_2"} and fx.get("TFX_2") == {"TFX_1", "TFX_4"}   # TFX_4 نفس اسم TFX_1: مش غلط معاه
+    assert "TFX_3" not in fx
+    r = client.get("/api/centers/issues.xlsx")
+    assert r.status_code == 200 and r.data[:2] == b"PK"
+
+    # «نفس المبنى»: الزوج يخرج من القايمة والمواقع ما تتغيرش
+    assert client.post("/api/centers/TFX_1/same_place", json={"other": "TFX_2"}).status_code == 200
+    assert client.post("/api/centers/TFX_2/same_place", json={"other": "TFX_4"}).status_code == 200
+    fx = {c["code"] for c in client.get("/api/centers/issues").get_json()["centers"]}
+    assert not fx & {"TFX_1", "TFX_2", "TFX_4"}
+    assert next(c for c in client.get("/api/centers").get_json() if c["code"] == "TFX_2")["lat"] == 30.06012
+    assert client.post("/api/centers/TFX_1/same_place", json={"other": "NOPE"}).status_code == 404
+
+    # تعديل العنوان من السيستم: رفع الشيت تاني ما يغيّروش
+    assert client.post("/api/centers/TFX_3/edit", json={"address": "عنوان جديد مظبوط"}).status_code == 200
+    _upload(client, [("L1_9103", "cairo", "مركز ج", "TFX_3", "وسط البلد", "شارع الفلكي، عابدين", "")])
+    c = next(c for c in client.get("/api/centers").get_json() if c["code"] == "TFX_3")
+    assert c["address"] == "عنوان جديد مظبوط" and c["addr_manual"] == 1
+    assert client.post("/api/centers/NOPE/edit", json={"address": "x"}).status_code == 404

@@ -42,7 +42,7 @@
 <!-- مراجعة المواقع: لينك الشيت مقابل العنوان -->
 <div class="card" id="rv_card" style="margin-top:16px">
   <div class="card-header-clean">
-    <h2><span>🧭</span> مراجعة مواقع المراكز <span class="small mute">(لينك الشيت مقابل العنوان)</span></h2>
+    <h2><span>🧭</span> مراجعة وتعديل مواقع المراكز <span class="small mute">(لينك الشيت مقابل العنوان)</span></h2>
     <div class="row" style="gap:8px">
       <button class="btn sm gradient" id="rvbtn" onclick="reviewRun()">🔍 فحص المواقع</button>
       <button class="btn del sm" id="rvcancel" onclick="reviewCancel()" hidden>إلغاء</button>
@@ -55,6 +55,12 @@
   </div>
   <div class="hint" id="rvmsg"></div>
   <div class="row" id="rv_chips" style="gap:6px;margin-bottom:10px"></div>
+  <div class="row" id="rv_fix_bar" hidden style="justify-content:space-between;gap:8px;margin-bottom:8px">
+    <span class="hint" id="rv_fix_info" style="margin:0"></span>
+    <div class="row" style="gap:6px">
+      <a class="btn sm sec" href="/api/centers/issues.xlsx">📥 القايمة (Excel)</a>
+    </div>
+  </div>
   <div class="scroll" style="max-height:380px"><table id="rv_t"></table></div>
 
   <!-- لوحة مراجعة مركز واحد -->

@@ -37,6 +37,7 @@ function draw() {
       (c.link_name ? `<div class="small">${esc(c.link_name)}</div>` : "")) : ""],
     ["google_verdict", "Google API", (v, c) => googleCell(c)],
     ["flags", "تحذيرات", v => `<span class="warn">${esc(v || "")}</span>`],
+    ["code", "", v => `<button class="btn sm sec" data-code="${esc(v)}" onclick="event.stopPropagation();editCenter(this.dataset.code)">✏️ تعديل</button>`],
   ], rows, {rowAttr: (c) => `class="click${SEL === c.code ? " sel" : ""}" data-code="${esc(c.code)}" onclick="select(this.dataset.code)"`});
 }
 function drawMap() {
@@ -121,4 +122,4 @@ async function googleVerify() {
     onDone: j => { const x = j.result || {}; m.className = "hint " + ((x.review || []).length ? "warn" : "ok"); m.textContent = gSummary(x); done(); },
     onError: j => { const x = j.result; m.className = "hint bad"; m.textContent = (j.error || "اتلغى") + (x && x.checked ? " — اتفحص " + x.checked + " مركز قبل ما يقف: " + gSummary(x) : ""); done(); }});
 }
-status(); load(); googleStatus();
+status(); load().then(() => typeof loadFixes === "function" && loadFixes()); googleStatus();

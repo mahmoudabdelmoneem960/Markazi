@@ -70,7 +70,8 @@ def connect(path=None):
                              # مراجعة المواقع: تقدير الموقع من العنوان (geocoder محلي) + قرار المستخدم + اللينك الصح
                              ("addr_lat", "REAL"), ("addr_lon", "REAL"), ("addr_level", "TEXT"), ("addr_matched", "TEXT"),
                              ("link_tried", "INTEGER"), ("review", "TEXT"), ("review_at", "TEXT"), ("review_by", "TEXT"),
-                             ("correct_url", "TEXT")):
+                             ("correct_url", "TEXT"), ("addr_manual", "INTEGER"),
+                             ("dup_ok", "TEXT")):                     # مراكز اتأكد إنها في نفس المبنى مع المركز ده
                 if col not in have:                                                           # قاعدة قديمة
                     try:
                         con.execute(f"ALTER TABLE centers ADD COLUMN {col} {typ}")
@@ -129,6 +130,11 @@ def parse_coords(text, strict=False):
         pairs.append((c1, c2) if dms[0][3].upper() in ("N", "S") else (c2, c1))
     if not pairs:
         m = re.search(r"!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)", t)
+        if m:
+            pairs.append((float(m.group(1)), float(m.group(2))))
+    if not pairs:
+        # دبوس متشارك من Google Maps: /maps/search/31.216831,+29.929837 (أو /place/ أو /dir/) — الإحداثيات هي المكان نفسه
+        m = re.search(r"/maps/(?:search|place|dir)/(-?\d+\.\d+)\s*,\s*\+?\s*(-?\d+\.\d+)", t)
         if m:
             pairs.append((float(m.group(1)), float(m.group(2))))
     if not pairs:
@@ -299,6 +305,8 @@ def centers_upsert(C, source="sheet", con=None):
                 con.execute("UPDATE centers SET link_lat=NULL, link_lon=NULL, link_diff_m=NULL, link_name=NULL, link_tried=NULL "
                             "WHERE code=?", (rec["code"],))
                 rep.setdefault("link_changed", []).append(rec["code"])
+            if row["addr_manual"]:
+                rec["address"] = row["address"] or ""        # العنوان اتعدّل بإيد المستخدم: الشيت ما بيغيّرهوش
             if rec["address"] and rec["address"] != (row["address"] or "") or rec["area"] != (row["area"] or ""):
                 con.execute("UPDATE centers SET addr_lat=NULL, addr_lon=NULL, addr_level=NULL, addr_matched=NULL WHERE code=?",
                             (rec["code"],))
