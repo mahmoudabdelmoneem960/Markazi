@@ -52,6 +52,41 @@
   <div class="kpis k7" id="kpis" style="margin-top:12px"></div>
   <div class="hint" id="p_notes" style="margin-bottom:14px"></div>
 
+  <div class="card" id="cd_card">
+    <div class="card-header-clean">
+      <h2><span>🏷️</span> أكواد الجروبات <span class="pill brand" id="cd_type"></span></h2>
+      <a class="btn sm sec" id="cd_xl">📥 الأكواد (Excel)</a>
+    </div>
+    <div class="hint" id="cd_fmt" style="margin:0 0 10px"></div>
+    <div class="hint" id="cd_msg" style="margin:0"></div>
+    <div id="cd_body" hidden>
+      <div class="kpis" id="cd_kpis" style="margin-bottom:12px"></div>
+      <div class="hint bad" id="cd_excluded" hidden></div>
+      <div class="grid2" style="align-items:start;gap:14px">
+        <div>
+          <div class="small mute" style="margin-bottom:4px">الجروبات في كل ليفيل (نص الجمعة ونص السبت):</div>
+          <div class="scroll" style="max-height:330px"><table id="cd_levels"></table></div>
+        </div>
+        <div id="cd_govs_wrap">
+          <div class="small mute" style="margin-bottom:4px">الجروبات في كل محافظة:</div>
+          <div class="scroll" style="max-height:330px"><table id="cd_govs"></table></div>
+        </div>
+      </div>
+      <div class="row" style="gap:8px;margin:14px 0 10px">
+        <input type="search" id="cd_q" class="inline" placeholder="🔍 بحث في الأكواد..." oninput="cdFilter()" style="min-width:220px">
+        <select id="cd_day" class="inline" onchange="cdFilter()"><option value="">اليومين</option><option value="A">A · الجمعة</option><option value="B">B · السبت</option></select>
+        <select id="cd_level" class="inline" onchange="cdFilter()"></select>
+        <select id="cd_gov" class="inline" onchange="cdFilter()"></select>
+        <span class="hint" id="cd_info" style="margin:0"></span>
+      </div>
+      <div class="scroll tall"><table id="cd_t"></table></div>
+      <div class="row" style="justify-content:flex-end;gap:6px;margin-top:8px">
+        <button class="btn sm sec" onclick="cdPage(-1)">→ السابق</button>
+        <button class="btn sm sec" onclick="cdPage(1)">التالي ←</button>
+      </div>
+    </div>
+  </div>
+
   <div class="card">
     <div class="card-header-clean">
       <h2><span>📍</span> المحافظات (مرتبة بعدد الطلاب)</h2>
@@ -104,6 +139,7 @@
     <div class="card-header-clean">
       <h2><span>🧮</span> كل ليفيل في كل محافظة</h2>
       <select id="f_matrix" class="inline" onchange="renderMatrix()" style="min-width:180px">
+        <option value="both">الطلاب + الجروبات</option>
         <option value="students">عدد الطلاب</option>
         <option value="groups">عدد الجروبات المطلوبة</option>
       </select>

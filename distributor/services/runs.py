@@ -29,14 +29,30 @@ def run_dir(run_id):
 
 
 # ---------------- المسودة (الملفات المرفوعة قبل التشغيل) ----------------
-def save_draft(sname, sraw, cname, craw):
+def save_draft(sname, sraw, cname=None, craw=None, gname=None, graw=None, source="sheet", default_cap=25):
+    """source: 'sheet' = شيت المراكز المرفوع، 'db' = المراكز من قاعدة البيانات. شيت الجروبات (g) اختياري في الحالتين.
+    شيت المراكز اللي المحرك هيشتغل عليه بيتجهز هنا ويتحفظ centers.csv."""
+    from distributor.services import groupsheet
+    source = "db" if source == "db" else "sheet"
+    C = sheets.parse_file(cname, craw) if (craw is not None and source == "sheet") else None
+    G = sheets.parse_file(gname, graw) if graw is not None else None
+    built, notes, glabel = groupsheet.assemble(source, C=C, G=G, default_cap=int(default_cap or 25))
     config.ensure_dirs()
     token = uuid.uuid4().hex[:12]
     d = config.TMP_DIR / token
     d.mkdir(parents=True)
     (d / ("students" + Path(sname).suffix.lower())).write_bytes(sraw)
-    (d / ("centers" + Path(cname).suffix.lower())).write_bytes(craw)
-    (d / "meta.json").write_text(json.dumps({"students": sname, "centers": cname, "at": time.time()}), encoding="utf-8")
+    built.to_csv(d / "centers.csv", index=False, encoding="utf-8-sig")
+    if C is not None:
+        (d / ("orig_centers" + Path(cname).suffix.lower())).write_bytes(craw)
+    if G is not None:
+        (d / ("orig_groups" + Path(gname).suffix.lower())).write_bytes(graw)
+    clabel = cname if source == "sheet" else "قاعدة المراكز"
+    if G is not None:
+        clabel += f" + {gname}"
+    meta = {"students": sname, "centers": clabel, "source": source, "groups": gname, "groups_label": glabel,
+            "notes": notes, "at": time.time()}
+    (d / "meta.json").write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
     _cleanup_drafts()
     return token
 
@@ -62,11 +78,14 @@ def _cleanup_drafts(max_age=6 * 3600):
 
 def draft_preflight(token):
     meta, sp, cp = load_draft(token)
-    S = sheets.parse_file(meta["students"], sp.read_bytes())
-    C = sheets.parse_file(meta["centers"], cp.read_bytes())
+    S = sheets.parse_file(sp.name, sp.read_bytes())
+    C = sheets.parse_file(cp.name, cp.read_bytes())
     rep = preflight.preflight(S, C)
+    for lvl, text in meta.get("notes") or []:
+        rep["issues"].append({"level": lvl, "text": text})
     rep["token"] = token
     rep["files"] = {"students": meta["students"], "centers": meta["centers"]}
+    rep["source"] = {"centers": meta.get("source", "sheet"), "groups": meta.get("groups_label") or "من شيت المراكز"}
     return rep
 
 
@@ -76,8 +95,9 @@ def create_run(token, params, name="", user=""):
     run_id = uuid.uuid4().hex[:10]
     d = run_dir(run_id) / "input"
     d.mkdir(parents=True)
-    shutil.copy2(sp, d / sp.name)
-    shutil.copy2(cp, d / cp.name)
+    for f in sp.parent.iterdir():
+        if f.name != "meta.json":
+            shutil.copy2(f, d / f.name)
     shutil.rmtree(sp.parent, ignore_errors=True)
     p = {"max_km": float(params.get("max_km") or engine.MAX_KM), "road_mode": params.get("road_mode", "osrm"),
          "osrm_url": (params.get("osrm_url") or config.OSRM_URL).strip(), "detour": float(params.get("detour") or engine.DETOUR),
@@ -135,7 +155,7 @@ def execute(job, run_id):
         cp = next(x for x in inp.iterdir() if x.name.startswith("centers"))
         S, adapt_note = sheets.adapt_students(sheets.parse_file(run["students_file"], sp.read_bytes()))
         progress(2, "قراءة شيت المراكز...")
-        C = sheets.parse_file(run["centers_file"], cp.read_bytes())
+        C = sheets.parse_file(cp.name, cp.read_bytes())
         P = geoprep.prepare(S, C, mode=p["geo_mode"], max_km=p["max_km"], progress=progress)
         S, C = P["S"], P["C"]
         r = engine.distribute(S, C, max_km=p["max_km"], progress=progress, road_mode=p["road_mode"],

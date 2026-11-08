@@ -37,6 +37,15 @@
     </button>
   </div>
 
+  <div class="row" style="margin-bottom:14px;align-items:center;gap:10px;flex-wrap:wrap">
+    <b>مصدر المراكز:</b>
+    <div class="mode-seg" id="src_seg">
+      <button type="button" data-src="db" onclick="setSource('db')">🗄️ شيت الطلاب بس (المراكز من قاعدة البيانات)</button>
+      <button type="button" data-src="sheet" onclick="setSource('sheet')">📁 شيت الطلاب + شيت المراكز</button>
+    </div>
+    <span class="hint" id="src_info"></span>
+  </div>
+
   <div class="grid2" style="margin-bottom:18px">
     <!-- Students Dropzone -->
     <div class="dropzone" id="dz_students" onclick="$('#students').click()">
@@ -62,6 +71,26 @@
         <span id="name_centers"></span>
         <span>✓ جاهز</span>
       </div>
+    </div>
+
+    <!-- Groups Dropzone (optional) -->
+    <div class="dropzone" id="dz_groups" onclick="$('#groups').click()">
+      <input type="file" id="groups" accept=".xlsx,.xls,.csv" style="display:none" onchange="onFileSelected('groups')">
+      <div class="dropzone-icon">🏷️</div>
+      <div class="dropzone-title">شيت الجروبات (اختياري)</div>
+      <div class="dropzone-desc">لو عايز التوزيع يمشي على جروبات بعينها: كود الجروب + كود المركز + اليوم + التوقيت (+ السعة)</div>
+      <div class="small mute" id="groups_hint">لو مرفعتوش: الجروبات من شيت المراكز</div>
+      <div class="small"><a href="/api/runs/groups_template.xlsx" onclick="event.stopPropagation()">📥 تحميل نموذج شيت الجروبات</a></div>
+      <div id="badge_groups" class="file-loaded-badge" style="display:none">
+        <span id="name_groups"></span>
+        <span>✓ جاهز</span>
+        <button type="button" class="btn sec sm" onclick="event.stopPropagation();clearGroups()">✕ شيل</button>
+      </div>
+    </div>
+
+    <div id="cap_box" style="align-self:center">
+      <label for="default_cap">سعة الجروب لو شيت الجروبات مفيهوش عمود سعة:</label>
+      <input type="number" id="default_cap" value="25" min="1" max="200" style="max-width:120px">
     </div>
   </div>
 

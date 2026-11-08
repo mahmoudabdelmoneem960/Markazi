@@ -160,8 +160,16 @@ def level_key(text):
 
 
 def group_key(code):
-    m = re.match(r"\s*L(\d+)([A-Za-z]*)_", str(code), re.I)
-    return f"L{m.group(1)}{m.group(2).upper()}" if m else None
+    """'L3WB_0002' -> L3WB ، 'PH-B-CAI-V03-L2-GEN-C008' / 'ON-A-S1-L4-DT-C010' -> L2 / L4DT"""
+    s = str(code)
+    m = re.match(r"\s*L(\d+)([A-Za-z]*)_", s, re.I)
+    if m:
+        return f"L{m.group(1)}{m.group(2).upper()}"
+    m = re.match(r"\s*(?:PH|ON)-.*?-L(\d+)-([A-Za-z]+)-C\d+\s*$", s, re.I)
+    if m:
+        tr = m.group(2).upper()
+        return f"L{m.group(1)}{'' if tr == 'GEN' else tr}"
+    return None
 
 
 def haversine(lat1, lon1, lat2, lon2):
@@ -379,7 +387,7 @@ def distribute(S, C, max_km=MAX_KM, progress=lambda p, m: None, road_mode="facto
     C["lon"] = pd.to_numeric(C[c_lon], errors="coerce")
     bad_code = C[C["key"].isna()]
     if len(bad_code):
-        warnings.append(f"{len(bad_code)} جروب كوده مش بصيغة L1_xxxx أو L3WB_xxxx وتم تجاهلهم.")
+        warnings.append(f"{len(bad_code)} جروب كوده مش بصيغة L1_xxxx أو L3WB_xxxx أو PH-…-L2-GEN-C001 وتم تجاهلهم.")
         C = C[C["key"].notna()]
     # الإحداثيات مكتوبة قدام أول روم بس: نعممها على كل رومز نفس المركز
     for col in ("lat", "lon"):

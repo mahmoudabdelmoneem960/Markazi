@@ -141,7 +141,7 @@ def analyze(S_raw):
                                   .value_counts().head(10).to_dict()}
 
 
-def to_excel(rep, cap=None, mode=None):
+def to_excel(rep, cap=None, mode=None, codes=None):
     """تقرير Excel: ملخص، البنود، المحافظات، الليفيلات، ومصفوفة محافظة × ليفيل (+ الجروبات المطلوبة لو فيه سعة)."""
     lo = rep["levels_order"]
     gg = {g["gov_code"]: _gov_groups(g, cap) for g in rep["govs"]} if cap else {}
@@ -194,19 +194,36 @@ def to_excel(rep, cap=None, mode=None):
             gm = pd.concat([gm, pd.DataFrame([{"المحافظة": "الإجمالي", "البند": "",
                                                 **{c: int(gm[c].sum()) for c in gm.columns[2:]}}])], ignore_index=True)
         sheets_out.append(("جروبات محافظة × ليفيل", gm))
+    code_names = set()
+    if codes and codes.get("rows"):          # أكواد الجروبات في نفس التقرير
+        from distributor.services import groupcodes
+        cs = groupcodes.excel_sheets(codes, prefix="أكواد - ")
+        code_names = {nm for nm, _ in cs}
+        sheets_out += cs
     out = io.BytesIO()
     with pd.ExcelWriter(out, engine="xlsxwriter") as xw:
         for name, d in sheets_out:
             d.to_excel(xw, sheet_name=name, index=False)
-            xw.sheets[name].right_to_left()
+            if name in code_names:
+                from distributor.services import groupcodes
+                groupcodes.format_sheet(xw, name, d)
+            else:
+                xw.sheets[name].right_to_left()
     out.seek(0)
     return out
 
 
 # ---------------- الـ history ----------------
-def total_groups(rep, cap):
+def total_groups(rep, cap, mode="physical"):
     if not rep or not cap:
         return None
+    if mode == "online":   # Online: الجروب ليفيل واحد من أي محافظة → على مستوى الجمهورية
+        lv = {}
+        for g in rep["govs"]:
+            for k, c in g["levels"].items():
+                if k != UNKNOWN_LEVEL:
+                    lv[k] = lv.get(k, 0) + int(c or 0)
+        return sum(groups_needed(c, cap) for c in lv.values())
     return sum(sum(_gov_groups(g, cap).values()) for g in rep["govs"])
 
 
@@ -239,7 +256,7 @@ def history(limit=200):
         rep = json.loads(r.pop("report") or "null")
         r["n_govs"] = sum(1 for g in (rep or {}).get("govs", []) if g["gov_code"] != UNKNOWN_GOV)
         r["n_levels"] = len((rep or {}).get("levels", []))
-        r["groups"] = total_groups(rep, r.get("cap"))
+        r["groups"] = total_groups(rep, r.get("cap"), r.get("mode") or "physical")
         r["band2"] = next((b["students"] for b in (rep or {}).get("bands", []) if b["band"] == engine.BAND_2), 0)
         out.append(r)
     return out

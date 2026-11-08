@@ -112,7 +112,7 @@ def preflight(S_raw, C_raw):
     keys = C[cc["group"]].map(engine.group_key)
     ct["bad_group_codes"] = int(keys.isna().sum())
     if ct["bad_group_codes"]:
-        _issue(issues, "warn", f"{ct['bad_group_codes']} جروب كوده مش بصيغة L1_xxxx / L3WB_xxxx (هيتجاهلوا).")
+        _issue(issues, "warn", f"{ct['bad_group_codes']} جروب كوده مش بصيغة L1_xxxx / L3WB_xxxx / PH-A-CAI-V01-L2-GEN-C001 (هيتجاهلوا).")
     cap = pd.to_numeric(C[cc["cap"]], errors="coerce").fillna(0).astype(int)
     ct["no_capacity"] = int((cap <= 0).sum())
     if ct["no_capacity"]:

@@ -96,6 +96,7 @@ function onFileSelected(key) {
     nameEl.textContent = `${file.name} (${sizeStr})`;
     badge.style.display = "flex";
   }
+  if (key === "groups") paintSource();
 }
 
 // Load Ready Sample in One Click
@@ -158,13 +159,55 @@ async function checkOsrm() {
   }
 }
 
+// مصدر المراكز: db = شيت الطلاب بس، sheet = الطلاب + المراكز
+let SOURCE = "db", SRC_INFO = null;
+
+function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* */ } }
+
+function paintSource() {
+  $$("#src_seg button").forEach(b => b.classList.toggle("on", b.dataset.src === SOURCE));
+  $("#dz_centers").style.display = SOURCE === "sheet" ? "" : "none";
+  const g = !!($("#groups").files || []).length, i = SRC_INFO;
+  let info = "", gh = "";
+  if (SOURCE === "db") {
+    info = i ? `قاعدة المراكز: ${n(i.db_centers)} مركز (${n(i.db_with_coords)} بموقع)` : "";
+    gh = g ? "الجروبات هتتاخد من الشيت ده" :
+      (i && i.latest_groups ? `لو مرفعتوش: ${i.latest_groups} — ${n(i.latest_groups_n)} جروب في ${n(i.latest_centers_n)} مركز`
+                            : "⚠ مفيش جروبات محفوظة من تشغيل قبل كده: ارفع شيت الجروبات");
+  } else {
+    gh = g ? "الجروبات هتتاخد من الشيت ده، وبيانات المراكز من شيت المراكز (والناقص من القاعدة)" : "لو مرفعتوش: الجروبات من شيت المراكز";
+  }
+  $("#src_info").textContent = info;
+  $("#groups_hint").textContent = gh;
+}
+
+function setSource(s) {
+  SOURCE = s === "sheet" ? "sheet" : "db";
+  lsSet("markazi_run_source", SOURCE);
+  paintSource();
+}
+
+function clearGroups() {
+  $("#groups").value = "";
+  $("#badge_groups").style.display = "none";
+  paintSource();
+}
+
+async function loadSources() {
+  const r = await api("/api/runs/sources");
+  if (r.ok) SRC_INFO = r.j;
+  paintSource();
+}
+
 // Upload & Pre-flight
 async function upload() {
-  const s = $("#students").files[0], c = $("#centers").files[0];
-  if (!s || !c) {
+  const s = $("#students").files[0], c = $("#centers").files[0], g = $("#groups").files[0];
+  const need = SOURCE === "sheet" ? (s && c) : s;
+  if (!need) {
     $("#umsg").className = "hint bad";
-    $("#umsg").textContent = "يرجى اختيار شيت الطلاب وشيت المراكز معاً للمتابعة.";
-    toast("يرجى اختيار الملفين معاً", "bad");
+    $("#umsg").textContent = SOURCE === "sheet" ? "يرجى اختيار شيت الطلاب وشيت المراكز معاً للمتابعة." : "يرجى اختيار شيت الطلاب.";
+    toast(SOURCE === "sheet" ? "يرجى اختيار الملفين معاً" : "يرجى اختيار شيت الطلاب", "bad");
     return;
   }
 
@@ -176,7 +219,10 @@ async function upload() {
 
   const fd = new FormData();
   fd.append("students", s);
-  fd.append("centers", c);
+  fd.append("source", SOURCE);
+  if (SOURCE === "sheet") fd.append("centers", c);
+  if (g) fd.append("groups", g);
+  fd.append("default_cap", $("#default_cap").value || "25");
 
   const r = await api("/api/runs/upload", {method: "POST", body: fd});
   btn.disabled = false;
@@ -193,7 +239,7 @@ async function upload() {
   PF = r.j;
   TOKEN = r.j.token;
   renderPreflight(r.j);
-  toast("تم فحص الشيتين بنجاح!", "ok");
+  toast("تم فحص الملفات بنجاح!", "ok");
   goToStep(2);
 }
 
@@ -263,7 +309,7 @@ function renderPreflight(p) {
 
   $("#pf_centers").innerHTML = kv([
     ["المراكز والقاعات", `<b>${n(c.centers)}</b> مركز / <b>${n(c.rows)}</b> جروب`],
-    ["اسم الملف", esc(p.files.centers)],
+    ["المصدر", esc(p.files.centers) + (p.source ? `<div class="small mute">المراكز: ${p.source.centers === "db" ? "من قاعدة البيانات" : "من الشيت"} · الجروبات: ${esc(p.source.groups)}</div>` : "")],
     ["إجمالي المقاعد المتاحة", `<b>${n(c.seats)}</b> مقعد`],
     ["أخطاء أكواد وسعة الجروبات", `${n(c.bad_group_codes)} كود خاطئ / ${n(c.no_capacity)} بدون سعة`, (c.bad_group_codes || c.no_capacity) ? "bad" : "ok"],
     ["مراكز بدون إحداثيات بالشيت", n((c.centers_no_coords || []).length) + ((c.centers_no_coords || []).length ? ` <span class="small mute">(${n(c.no_coords_with_link)} بالرابط، ${n(c.no_coords_with_addr_only)} بالعنوان)</span>` : "")],
@@ -344,6 +390,10 @@ async function start() {
 document.addEventListener("DOMContentLoaded", () => {
   setupDropzone("#dz_students", "#students");
   setupDropzone("#dz_centers", "#centers");
+  setupDropzone("#dz_groups", "#groups");
+  SOURCE = lsGet("markazi_run_source") === "sheet" ? "sheet" : "db";
+  paintSource();
+  loadSources();
 
   const gm = $("#geo_mode");
   if (gm) {

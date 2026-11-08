@@ -7,7 +7,7 @@ from flask_login import current_user
 
 from distributor import config, db, jobs
 from distributor.core import engine, locdb
-from distributor.services import centers, compare, exports, planning, runs, sheets, whatif
+from distributor.services import centers, compare, exports, groupcodes, planning, runs, sheets, whatif
 
 bp = Blueprint("api", __name__, url_prefix="/api")
 
@@ -86,18 +86,60 @@ def runs_search_student():
 
 @bp.route("/runs/upload", methods=["POST"])
 def runs_upload():
-    """الخطوة 1: رفع الشيتين → مسودة + فحص مسبق."""
-    sf, cf = request.files.get("students"), request.files.get("centers")
-    if not sf or not cf:
-        return jsonify(error="ارفع شيت الطلاب وشيت المراكز."), 400
+    """الخطوة 1: رفع الشيتات → مسودة + فحص مسبق.
+    source=sheet: شيت الطلاب + شيت المراكز | source=db: شيت الطلاب بس والمراكز من قاعدة البيانات.
+    groups (اختياري): شيت جروبات (كود الجروب، كود المركز، اليوم، التوقيت، السعة)."""
+    sf, cf, gf = request.files.get("students"), request.files.get("centers"), request.files.get("groups")
+    source = "db" if request.form.get("source") == "db" else "sheet"
+    if not sf:
+        return jsonify(error="ارفع شيت الطلاب."), 400
+    if source == "sheet" and not cf:
+        return jsonify(error="ارفع شيت المراكز، أو اختار «المراكز من قاعدة البيانات»."), 400
     try:
-        token = runs.save_draft(sf.filename, sf.read(), cf.filename, cf.read())
+        cap = int(request.form.get("default_cap") or 25)
+    except ValueError:
+        cap = 25
+    try:
+        token = runs.save_draft(sf.filename, sf.read(), cf.filename if cf else None, cf.read() if cf else None,
+                                gf.filename if gf else None, gf.read() if gf else None, source=source, default_cap=cap)
         rep = runs.draft_preflight(token)
     except ValueError as e:
         return jsonify(error=str(e)), 400
     except Exception as e:  # noqa
         return jsonify(error=f"تعذر قراءة الملفات: {e}"), 400
     return jsonify(rep)
+
+
+@bp.route("/runs/sources")
+def runs_sources():
+    """للمعالج: كام مركز في القاعدة، وجروبات آخر تشغيل (اللي هتتستخدم لو رفعت الطلاب بس)."""
+    from distributor.services import groupsheet
+    info = groupsheet.db_centers()
+    G, label = groupsheet.latest_groups()
+    return jsonify(db_centers=int(len(info)), db_with_coords=int(info["Latitude"].notna().sum()) if len(info) else 0,
+                   latest_groups=label, latest_groups_n=int(len(G)) if G is not None else 0,
+                   latest_centers_n=int(G["Center Code"].nunique()) if G is not None else 0)
+
+
+@bp.route("/runs/groups_template.xlsx")
+def runs_groups_template():
+    """نموذج شيت الجروبات."""
+    import io
+
+    import pandas as pd
+    df = pd.DataFrame([
+        {"Group Code": "PH-A-CAI-V01-L1-GEN-C001", "Center Code": "CAI_C01", "Day": "Friday", "Time": "10:00", "سعة القاعة": 25},
+        {"Group Code": "PH-B-CAI-V01-L3-CY-C001", "Center Code": "CAI_C01", "Day": "Saturday", "Time": "14:00", "سعة القاعة": 25},
+        {"Group Code": "L2_0001", "Center Code": "ALX_C14", "Day": "Friday", "Time": "09:00", "سعة القاعة": 23},
+    ])
+    out = io.BytesIO()
+    with pd.ExcelWriter(out, engine="xlsxwriter") as xw:
+        df.to_excel(xw, sheet_name="الجروبات", index=False)
+        xw.sheets["الجروبات"].set_column(0, 0, 30)
+        xw.sheets["الجروبات"].set_column(1, 4, 14)
+    out.seek(0)
+    return send_file(out, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                     as_attachment=True, download_name="groups_template.xlsx")
 
 
 @bp.route("/runs/sample", methods=["POST"])
@@ -384,6 +426,34 @@ def planning_flags_xlsx(pid):
                      as_attachment=True, download_name=f"area_issues_{pid}.xlsx")
 
 
+def _plan_codes(pid):
+    p = planning.get(pid)
+    if not p:
+        return None, None
+    cap = _cap(request.args.get("cap")) or p.get("cap")
+    mode = _mode(request.args.get("mode") or p.get("mode"))
+    return p, groupcodes.generate(p["report"], mode, cap)
+
+
+@bp.route("/planning/<pid>/codes")
+def planning_codes(pid):
+    """أكواد الجروبات (Online / Physical) من نتيجة التحليل."""
+    p, res = _plan_codes(pid)
+    if not p:
+        return jsonify(error="التحليل ده مش موجود."), 404
+    return jsonify(res)
+
+
+@bp.route("/planning/<pid>/codes.xlsx")
+def planning_codes_xlsx(pid):
+    p, res = _plan_codes(pid)
+    if not p:
+        return jsonify(error="التحليل ده مش موجود."), 404
+    base = os.path.splitext(p.get("name") or p.get("file_name") or "planning")[0]
+    return send_file(groupcodes.to_excel(res), mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                     as_attachment=True, download_name=f"group_codes_{res['mode']}_{base}.xlsx")
+
+
 @bp.route("/planning/<pid>/export.xlsx")
 def planning_export(pid):
     p = planning.get(pid)
@@ -391,7 +461,7 @@ def planning_export(pid):
         return jsonify(error="التحليل ده مش موجود."), 404
     cap = _cap(request.args.get("cap")) or p.get("cap")
     mode = _mode(request.args.get("mode") or p.get("mode"))
-    data = planning.to_excel(p["report"], cap, mode)
+    data = planning.to_excel(p["report"], cap, mode, codes=groupcodes.generate(p["report"], mode, cap) if cap else None)
     base = os.path.splitext(p.get("name") or p.get("file_name") or "planning")[0]
     return send_file(data, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                      as_attachment=True, download_name=f"planning_{base}.xlsx")

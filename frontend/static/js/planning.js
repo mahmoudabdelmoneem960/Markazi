@@ -175,8 +175,13 @@ function render() {
   const bandOf = name => x.bands.find(b => b.band === name) || {students: 0, govs: 0};
   const b1 = bandOf(B1), b2 = bandOf(B2), b3 = bandOf(B3);
   const groupsIn = band => x.govs.filter(g => g.band === band).reduce((s, g) => s + g.groups, 0);
-  const totalGroups = x.govs.reduce((s, g) => s + g.groups, 0);
-  const counted = x.govs.filter(g => g.gov_code !== UNK_GOV).reduce((s, g) => s + g.students - (g.levels[UNK_LV] || 0), 0);
+  // Online: الجروب ليفيل واحد من أي محافظة، فالجروبات بتتحسب على مستوى الجمهورية
+  const online = MODE === "online";
+  const lvStudents = lv => x.govs.reduce((s, g) => s + (g.levels[lv] || 0), 0);
+  const natGroups = lv => (lv === UNK_LV ? 0 : ceilDiv(lvStudents(lv), c));
+  const totalGroups = online ? x.levels.reduce((s, l) => s + natGroups(l.level), 0) : x.govs.reduce((s, g) => s + g.groups, 0);
+  const counted = online ? x.total - (x.unknown_level || 0)
+    : x.govs.filter(g => g.gov_code !== UNK_GOV).reduce((s, g) => s + g.students - (g.levels[UNK_LV] || 0), 0);
   const fill = totalGroups ? Math.round(100 * counted / (totalGroups * c)) : 0;
 
   const k = (v, l, cls, prefix) => `<div class="kpi ${prefix || ""}"><b class="${cls || ""}">${v}</b><span>${l}</span></div>`;
@@ -196,7 +201,8 @@ function render() {
       </div></div>`;
   const grCard = c ? `<div style="width:100%">
       <div style="font-size:22px;font-weight:800;line-height:1.1;color:var(--ok)">${n(totalGroups)} <small style="font-size:11px;font-weight:600;color:var(--mute)">جروب</small></div>
-      <div style="margin-top:2px;display:flex;gap:3px;justify-content:center;flex-wrap:wrap">${chip("brand", "بند 1", n(groupsIn(B1)))}${chip("ok", "بند 3", n(groupsIn(B3)))}${groupsIn(B2) ? chip("warn", "بند 2", n(groupsIn(B2))) : ""}</div></div>`
+      <div style="margin-top:2px;display:flex;gap:3px;justify-content:center;flex-wrap:wrap">${online ? chip("ok", "💻 Online", "على مستوى الجمهورية")
+        : chip("brand", "بند 1", n(groupsIn(B1))) + chip("ok", "بند 3", n(groupsIn(B3))) + (groupsIn(B2) ? chip("warn", "بند 2", n(groupsIn(B2))) : "")}</div></div>`
     : `<span class="mute" style="font-size:13px">حدد السعة</span>`;
   const topLv = x.levels.find(l => l.level !== UNK_LV);
   const issues = (x.unknown_gov || 0) + (x.unknown_level || 0) + ((x.nid && (x.nid.invalid + x.nid.dup)) || 0);
@@ -225,16 +231,17 @@ function render() {
   $("#f_band").value = sel;
   renderGovs();
 
-  x.levels.forEach(l => { l.groups = x.govs.reduce((s, g) => s + (g.groups_by_level[l.level] || 0), 0); });
+  x.levels.forEach(l => { l.groups = online ? natGroups(l.level) : x.govs.reduce((s, g) => s + (g.groups_by_level[l.level] || 0), 0); });
   table("#t_levels", [["rank", "الترتيب"], ["level", "الليفيل"], ["students", "عدد الطلاب"], ["pct", "النسبة", pct],
     ["govs", "موجود في كام محافظة"], ...(c ? [["groups", "الجروبات المطلوبة", v => `<b>${n(v)}</b>`]] : [])], x.levels);
 
   renderMatrix();
   renderReview();
+  loadCodes();
 }
 
 function renderGovs() {
-  const band = $("#f_band").value, c = cap();
+  const band = $("#f_band").value, c = MODE === "online" ? 0 : cap();   // Online: مفيش جروبات لكل محافظة
   const rows = REP.govs.filter(g => !band || g.band === band);
   table("#t_govs", [
     [band ? "band_rank" : "rank", band ? "الترتيب في البند" : "الترتيب"],
@@ -244,7 +251,7 @@ function renderGovs() {
     ["pct", "من الإجمالي", pct], ["pct_band", "من البند", pct],
     ...(c ? [["groups", "الجروبات المطلوبة", v => `<b>${n(v)}</b>`]] : []),
     ["levels_ranked", "الليفيلات بالترتيب" + (c ? " (طلاب / جروبات)" : ""), (v, g) => (v || []).map((l, i) =>
-      `<span class="pill${i === 0 ? " brand" : ""}" title="${l.pct}% من المحافظة">${esc(l.level)}: ${n(l.students)}${c && g.groups_by_level[l.level] ? " / " + n(g.groups_by_level[l.level]) + " ج" : ""}</span>`).join(" ")],
+      `<span class="pill${i === 0 ? " brand" : ""}" title="${l.pct}% من المحافظة">${esc(l.level)}: ${n(l.students)}${c && g.groups_by_level[l.level] ? " / " + n(g.groups_by_level[l.level]) + " G" : ""}</span>`).join(" ")],
   ], rows);
   // صف المناطق تحت كل محافظة (مخفي لحد ما تدوس)
   const trs = $$("#t_govs tr");
@@ -291,19 +298,41 @@ function toggleAllAreas() {
   renderGovs();
 }
 
+/* كل ليفيل في كل محافظة: الطلاب، وتحتهم الجروبات المطلوبة (لو فيه سعة) */
 function renderMatrix() {
-  const mode = cap() ? $("#f_matrix").value : "students";
-  const src = g => (mode === "groups" ? g.groups_by_level : g.levels);
-  const lo = REP.levels_order.filter(l => mode === "students" || l !== UNK_LV);
-  const govs = REP.govs.filter(g => mode === "students" || g.gov_code !== UNK_GOV);
-  const rows = govs.map(g => ({gov: g.gov, band: g.band, total: mode === "groups" ? g.groups : g.students,
-    ...Object.fromEntries(lo.map(l => ["lv_" + l, src(g)[l] || 0]))}));
-  const tot = {gov: "الإجمالي", band: "", total: rows.reduce((s, r) => s + r.total, 0)};
-  lo.forEach(l => { tot["lv_" + l] = rows.reduce((s, r) => s + r["lv_" + l], 0); });
+  const c = cap(), online = MODE === "online";
+  const sel = $("#f_matrix");
+  [...sel.options].forEach(o => { o.disabled = o.value !== "students" && !c; });
+  const mode = c ? sel.value : "students";
+  const showSt = mode !== "groups", showGr = mode !== "students";
+  const lo = REP.levels_order.filter(l => showSt || l !== UNK_LV);
+  const govs = REP.govs.filter(g => showSt || g.gov_code !== UNK_GOV);
+  const rows = govs.map(g => {
+    const r = {gov: g.gov, band: g.band, st: g.students, gr: g.groups || 0};
+    lo.forEach(l => { r["lv_" + l] = {st: g.levels[l] || 0, gr: (g.groups_by_level || {})[l] || 0}; });
+    return r;
+  });
+  // صف الإجمالي: في الـOnline الجروبات على مستوى الجمهورية (طلاب الليفيل من كل المحافظات مع بعض)
+  const tot = {gov: online && showGr ? "الإجمالي (Online: على مستوى الجمهورية)" : "الإجمالي", band: "", _tot: true,
+    st: rows.reduce((s, r) => s + r.st, 0), gr: 0};
+  lo.forEach(l => {
+    const st = REP.govs.reduce((s, g) => s + (g.levels[l] || 0), 0);
+    const gr = online ? (l === UNK_LV ? 0 : ceilDiv(st, c)) : rows.reduce((s, r) => s + r["lv_" + l].gr, 0);
+    tot["lv_" + l] = {st: rows.reduce((s, r) => s + r["lv_" + l].st, 0), gr};
+    tot.gr += gr;
+  });
   rows.push(tot);
-  const cell = v => v ? n(v) : `<span class="mute">—</span>`;
-  table("#t_matrix", [["gov", "المحافظة"], ["band", "البند", v => v ? bandPill(v) : ""],
-    ...lo.map(l => ["lv_" + l, l, cell]), ["total", mode === "groups" ? "إجمالي الجروبات" : "الإجمالي", v => `<b>${n(v)}</b>`]], rows);
+  const fmt = (v, bold) => {
+    if (!v.st && !v.gr) return `<span class="mute">—</span>`;
+    const st = bold ? `<b>${n(v.st)}</b>` : n(v.st);
+    const gr = `<span style="color:var(--ok);font-weight:700">${n(v.gr)}</span> <span class="small mute">G</span>`;
+    if (!showGr) return st;
+    if (!showSt) return v.gr ? gr : `<span class="mute">—</span>`;
+    return `${st}<div class="small" style="margin-top:2px">${v.gr ? gr : '<span class="mute">—</span>'}</div>`;
+  };
+  table("#t_matrix", [["gov", "المحافظة", (v, r) => r._tot ? `<b>${esc(v)}</b>` : esc(v)], ["band", "البند", v => v ? bandPill(v) : ""],
+    ...lo.map(l => ["lv_" + l, l, (v, r) => fmt(v, r._tot)]),
+    ["st", showGr && !showSt ? "إجمالي الجروبات" : "الإجمالي", (v, r) => fmt({st: r.st, gr: r.gr}, true)]], rows);
 }
 
 
@@ -420,6 +449,68 @@ async function loadFlags() {
   ], d.rows, {empty: "مفيش طلاب بالفلتر ده"});
   $("#rv_info").textContent = d.total ? `${n(d.total)} طالب — صفحة ${d.page} من ${pages}` : "";
   $("#rv_prev").disabled = d.page <= 1; $("#rv_next").disabled = d.page >= pages;
+}
+
+/* ---------------- أكواد الجروبات ---------------- */
+let CODES = null, CD_ROWS = [], CD_PG = 1, _cdT = null, _cdSeq = 0;
+const CD_PER = 100;
+const CD_FMT = {
+  online: "<b>ON-Day-Slot-Level-Track-Class</b> · مثال <code>ON-A-S1-L2-GEN-C047</code> · Day: A = الجمعة / B = السبت · Slot: S1 للكل · Track: GEN لـ L1/L2 وغير كده التراك (CY/DT/WB/DA/EM) · الجروبات على مستوى الجمهورية لكل ليفيل.",
+  physical: "<b>PH-Day-Gov-Venue-Level-Track-Class</b> · مثال <code>PH-B-CAI-V01-L2-GEN-C008</code> · Day: A = الجمعة / B = السبت · Gov: 3 حروف (من أكواد المراكز) · Venue: V01 لحد ما المراكز تتحدد · الجروبات لكل محافظة لوحدها.",
+};
+function loadCodes() { clearTimeout(_cdT); _cdT = setTimeout(fetchCodes, 250); }
+async function fetchCodes() {
+  if (!CUR) return;
+  $("#cd_type").innerHTML = MODE === "online" ? "💻 Online" : "🏫 Physical";
+  $("#cd_fmt").innerHTML = CD_FMT[MODE];
+  if (!cap()) { $("#cd_body").hidden = true; $("#cd_xl").hidden = true; $("#cd_msg").textContent = "حدد سعة الجروب عشان الأكواد تطلع."; return; }
+  const qs = `?mode=${MODE}&cap=${cap()}`, seq = ++_cdSeq;
+  $("#cd_xl").hidden = false;
+  $("#cd_xl").href = `/api/planning/${encodeURIComponent(CUR.id)}/codes.xlsx` + qs;
+  $("#cd_msg").textContent = "⏳ جاري تجهيز الأكواد...";
+  const r = await api(`/api/planning/${encodeURIComponent(CUR.id)}/codes` + qs);
+  if (seq !== _cdSeq) return;                       // اتغيّر النوع/السعة أثناء التحميل
+  if (!r.ok) { $("#cd_msg").textContent = r.j.error || "تعذر تجهيز الأكواد"; $("#cd_body").hidden = true; return; }
+  CODES = r.j; $("#cd_msg").textContent = ""; $("#cd_body").hidden = false;
+  renderCodes();
+}
+function renderCodes() {
+  const x = CODES, s = x.summary, phys = x.mode === "physical";
+  const k = (v, l, cls) => `<div class="kpi"><b class="${cls || ""}">${v}</b><span>${l}</span></div>`;
+  const day = d => s.days.find(z => z.day === d) || {groups: 0, students: 0};
+  $("#cd_kpis").innerHTML = k(n(s.groups), "إجمالي الجروبات", "ok") + k(n(s.students), "طالب في الجروبات") +
+    k(`${n(day("A").groups)} <small style="font-size:12px;color:var(--mute)">جروب · ${n(day("A").students)} طالب</small>`, "A · الجمعة", "brand") +
+    k(`${n(day("B").groups)} <small style="font-size:12px;color:var(--mute)">جروب · ${n(day("B").students)} طالب</small>`, "B · السبت", "brand");
+  const ex = x.excluded || [];
+  $("#cd_excluded").hidden = !ex.length;
+  $("#cd_excluded").innerHTML = ex.length ? `⚠ ${n(ex.reduce((a, e) => a + e.students, 0))} طالب مش داخلين في أكواد الـPhysical: ` +
+    ex.map(e => `${esc(e.gov)} (${n(e.students)} — ${esc(e.reason)})`).join("، ") : "";
+  table("#cd_levels", [["level", "Level"], ["track", "Track"], ["A", "A · الجمعة"], ["B", "B · السبت"],
+    ["groups", "الإجمالي", v => `<b>${n(v)}</b>`], ["students", "الطلاب"]], s.levels);
+  $("#cd_govs_wrap").hidden = !phys;
+  if (phys) table("#cd_govs", [["gov3", "Gov", v => `<b>${esc(v)}</b>`], ["gov", "المحافظة"], ["A", "A"], ["B", "B"],
+    ["groups", "الإجمالي", v => `<b>${n(v)}</b>`], ["students", "الطلاب"]], s.govs);
+  const keep = (id, opts, all) => { const v = $(id).value; $(id).innerHTML = `<option value="">${all}</option>` + opts; if ([...$(id).options].some(o => o.value === v)) $(id).value = v; };
+  keep("#cd_level", s.levels.map(l => `<option value="${esc(l.level_code)}">${esc(l.level)} ${esc(l.track)}</option>`).join(""), "كل الليفيلات");
+  keep("#cd_gov", s.govs.map(g => `<option value="${esc(g.gov3)}">${esc(g.gov3)} · ${esc(g.gov)}</option>`).join(""), "كل المحافظات");
+  $("#cd_gov").hidden = !phys;
+  cdFilter();
+}
+function cdFilter() {
+  if (!CODES) return;
+  const q = ($("#cd_q").value || "").trim().toUpperCase(), d = $("#cd_day").value, lv = $("#cd_level").value, g = $("#cd_gov").value;
+  CD_ROWS = CODES.rows.filter(r => (!q || r.code.includes(q)) && (!d || r.day === d) && (!lv || r.level_code === lv) && (!g || r.gov3 === g));
+  CD_PG = 1; cdDraw();
+}
+function cdPage(dlt) { const pages = Math.max(1, Math.ceil(CD_ROWS.length / CD_PER)); CD_PG = Math.min(pages, Math.max(1, CD_PG + dlt)); cdDraw(); }
+function cdDraw() {
+  const phys = CODES.mode === "physical", pages = Math.max(1, Math.ceil(CD_ROWS.length / CD_PER));
+  const rows = CD_ROWS.slice((CD_PG - 1) * CD_PER, CD_PG * CD_PER);
+  table("#cd_t", [["code", "Group Code", v => `<b style="direction:ltr;unicode-bidi:embed;font-family:monospace">${esc(v)}</b>`],
+    ["day", "اليوم", (v, r) => `${esc(v)} · ${esc(r.day_ar)}`], ["slot", "Slot"],
+    ...(phys ? [["gov3", "Gov", (v, r) => `${esc(v)} <span class="small mute">${esc(r.gov)}</span>`], ["venue", "Venue"]] : []),
+    ["level", "Level"], ["track", "Track"], ["class", "Class"], ["students", "الطلاب المتوقعين"]], rows, {empty: "مفيش أكواد بالفلتر ده"});
+  $("#cd_info").textContent = `${n(CD_ROWS.length)} جروب` + (pages > 1 ? ` · صفحة ${CD_PG} من ${pages}` : "");
 }
 
 (async function init() {
