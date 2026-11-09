@@ -30,6 +30,14 @@ def test_level_from_level_name_when_no_group():
     assert out["Level(25-26)"].iloc[0] == "Level (3): web"
 
 
+def test_level_track_from_planning_group_codes():
+    """أكواد التخطيط بتفصل التراك (L3-WB)، والقديمة لازقاه (L4CY): الاتنين لازم يطلعوا التراك."""
+    S = pd.DataFrame({"national_id": ["1", "2", "3", "4"], "city": ["cairo"] * 4,
+                      "group": ["PH-A-CAI-V01-L3-WB-C003", "ON-B-S1-L2-GEN-C047", "ON-BH-L4CY-G1689", "ON-A-S1-L4-DT-C001"]})
+    out, _ = sheets.adapt_students(S)
+    assert out["Level(25-26)"].tolist() == ["Level (3): web", "Level (2)", "Level (4): cyber", "Level (4): data"]
+
+
 def test_preflight_detects_problems():
     S = pd.DataFrame({"Student NID": ["31002281400186", "31002281400186", "31002281400187"], "gov": ["القاهرة", "القاهرة", "كوكب"],
                       "Area": ["المعادي", "", ""], "Adress": ["a", "", ""], "Level(25-26)": ["Level (1)", "Level (9)", "x"]})

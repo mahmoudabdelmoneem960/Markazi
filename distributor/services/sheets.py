@@ -50,8 +50,8 @@ def adapt_students(S):
     levels = S[low["level"]].map(clean) if "level" in low else pd.Series([""] * len(S))
 
     def level_text(g, lv):
-        m = re.search(r"-(L\d[A-Z]*)-", g)
-        code = m.group(1) if m else LVL_NAMES.get(lv.lower())
+        m = re.search(r"-(L\d[A-Z]*)(?:-(CY|DT|WB|DA|EM))?-", g)        # L3WB (قديم) أو L3-WB (أكواد التخطيط)
+        code = m.group(1) + (m.group(2) or "") if m else LVL_NAMES.get(lv.lower())
         if not code:
             return ""
         mm = re.match(r"L(\d)([A-Z]*)", code)
