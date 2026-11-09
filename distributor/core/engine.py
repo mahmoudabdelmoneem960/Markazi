@@ -98,16 +98,42 @@ BAND_GOVS_AR = {
 
 def get_gov_band(gov_name_or_code):
     """تحديد البند التابع له المحافظة (البند الأول / الثاني / الثالث) سواء بالاسم العربي أو الكود الإنجليزي."""
-    if gov_name_or_code is None or (not isinstance(gov_name_or_code, str) and pd.isna(gov_name_or_code)):
-        return "غير محدد"
-    s = str(gov_name_or_code).strip()
-    low = s.lower()
-    if low in CITY_BANDS:
-        return CITY_BANDS[low]
-    code = GOV_MAP.get(norm_ar(s))
-    if code and code in CITY_BANDS:
-        return CITY_BANDS[code]
-    return "غير محدد"
+    code = gov_code(gov_name_or_code)
+    return CITY_BANDS.get(code, "غير محدد") if code else "غير محدد"
+
+
+_GOV_NOSPACE = {k.replace(" ", ""): v for k, v in GOV_MAP.items()}
+_GOV_EN = {**{c: c for c in CITY_BANDS}, "alex": "alexandria", "behira": "beheira", "bani_suef": "beni_suef",
+           "kafr_elsheikh": "kafr_el_sheikh", "kafr_sheikh": "kafr_el_sheikh", "kafrelsheikh": "kafr_el_sheikh",
+           "portsaid": "port_said", "menofia": "monufia", "menoufia": "monufia", "qalyoubia": "qalyubia",
+           "sharkia": "sharqia", "dakahliya": "dakahlia", "faiyum": "fayoum", "asyut": "assiut", "marsa_matrouh": "matrouh"}
+
+
+@lru_cache(maxsize=4096)
+def _gov_code_str(s):
+    n = norm_ar(s)
+    if not n:
+        return None
+    for pre in ("محافظه ", "محافظة "):
+        if n.startswith(pre):
+            n = n[len(pre):].strip()
+    hit = GOV_MAP.get(n) or _GOV_NOSPACE.get(n.replace(" ", ""))
+    if hit:
+        return hit
+    if not n.startswith("ال"):                               # «اسكندرية» = «الإسكندرية»
+        hit = _GOV_NOSPACE.get("ال" + n.replace(" ", ""))
+        if hit:
+            return hit
+    en = re.sub(r"[\s\-]+", "_", n.replace("governorate", "").strip(" _-"))
+    return _GOV_EN.get(en) or _GOV_EN.get(en.replace("_", ""))
+
+
+def gov_code(name):
+    """اسم المحافظة زي ما هو مكتوب في الشيت (عربي بأي كتابة، «محافظة X»، أو كود إنجليزي) -> كود City. None لو مش معروفة.
+    ده المرجع الوحيد لتحويل المحافظة في السيستم كله (المحرك، الفحص المسبق، التخطيط، تحديد المواقع)."""
+    if name is None or (not isinstance(name, str) and pd.isna(name)):
+        return None
+    return _gov_code_str(str(name))
 
 # السماح بمراكز محافظة تانية. فاضي = كل طالب في محافظته بدون استثناء.
 GOV_ALLOW = {}
@@ -143,10 +169,16 @@ def area_key(x):
     return frozenset(toks)
 
 
+_LEVEL_CODE_RE = re.compile(r"\s*L\s*(\d+)\s*[-_ ]?\s*(CY|DT|WB|DA|EM)?\s*", re.I)
+
+
 @lru_cache(maxsize=None)
 def level_key(text):
-    """'Level (3): Web' -> L3WB , 'Level 1' -> L1"""
+    """'Level (3): Web' -> L3WB , 'Level 1' -> L1 , 'L3CY' -> L3CY , 'Level (4): AI' -> L4DT (AI = تراك الداتا)"""
     s = "" if text is None or (not isinstance(text, str) and pd.isna(text)) else str(text)
+    m = _LEVEL_CODE_RE.fullmatch(s)                          # الليفيل مكتوب ككود جاهز
+    if m:
+        return f"L{m.group(1)}{(m.group(2) or '').upper()}"
     m = re.search(r"(\d+)", s)
     if not m:
         return None
@@ -156,6 +188,8 @@ def level_key(text):
         if k in low:
             tr = v
             break
+    if not tr and re.search(r"\bai\b", low):
+        tr = "DT"
     return f"L{m.group(1)}{tr}"
 
 
@@ -435,7 +469,7 @@ def distribute(S, C, max_km=MAX_KM, progress=lambda p, m: None, road_mode="facto
     ak_a = np.empty(n, dtype=object)
     for i, (lv, gv, ar) in enumerate(zip(S[lvl_col], S[gov_col], S[area_col])):
         key_a[i] = level_key(lv)
-        gov_a[i] = GOV_MAP.get(norm_ar(gv))
+        gov_a[i] = gov_code(gv)
         ak_a[i] = area_key(ar)
     lat_a = pd.to_numeric(S[s_lat], errors="coerce").to_numpy(float)
     lon_a = pd.to_numeric(S[s_lon], errors="coerce").to_numpy(float)
@@ -503,6 +537,7 @@ def distribute(S, C, max_km=MAX_KM, progress=lambda p, m: None, road_mode="facto
     nearest_ci = np.full(n, -1)
     reason = [""] * n
     pairs = []
+    extra_pairs = []     # باقي المراكز داخل المسافة بعد أقرب TOP_CENTERS (للي ملحقش مقعد في الجولة الأولى)
 
     # ---- مسافات الطرق (OSRM) لكل طالب × مراكز محافظته ----
     road = None
@@ -637,25 +672,34 @@ def distribute(S, C, max_km=MAX_KM, progress=lambda p, m: None, road_mode="facto
             continue
         eqm = area_eq(ak_a[i], gov_a[i])
         tier = (~eqm[within]).astype(int)
-        order = within[np.lexsort((d[within], tier))][:TOP_CENTERS]
-        for j in order:
+        order_all = within[np.lexsort((d[within], tier))]
+        for j in order_all[:TOP_CENTERS]:
             pairs.append((int(not eqm[j]), float(d[j]), i, int(j)))
+        for j in order_all[TOP_CENTERS:]:                # احتياطي: لو أقرب TOP_CENTERS مراكز اتملوا
+            extra_pairs.append((int(not eqm[j]), float(d[j]), i, int(j)))
 
     # ---- greedy: نفس المنطقة أولًا ثم الأقرب ----
     progress(72, "توزيع الطلاب")
-    pairs.sort()
     res = {}
-    for tier, dist, i, j in pairs:
-        if i in res:
-            continue
-        gk = (j, key_a[i])
-        if seats_left[gk] <= 0:
-            continue
-        gl = [g for g in groups[gk] if g["left"] > 0]
-        g = max(gl, key=lambda x: x["left"])     # توزيع متساوي بين جروبات المركز
-        g["left"] -= 1
-        seats_left[gk] -= 1
-        res[i] = (j, g, round(dist, 1), tier)
+
+    def _greedy(cands):
+        cands.sort()
+        for tier, dist, i, j in cands:
+            if i in res:
+                continue
+            gk = (j, key_a[i])
+            if seats_left[gk] <= 0:
+                continue
+            gl = [g for g in groups[gk] if g["left"] > 0]
+            g = max(gl, key=lambda x: x["left"])     # توزيع متساوي بين جروبات المركز
+            g["left"] -= 1
+            seats_left[gk] -= 1
+            res[i] = (j, g, round(dist, 1), tier)
+
+    _greedy(pairs)
+    # الجولة التانية: الطلاب اللي أقرب TOP_CENTERS مراكز ليهم اتملوا بيجربوا باقي المراكز داخل المسافة
+    # (من غيرها الطالب كان بيطلع VP بسبب «كل المراكز ممتلئة» وفيه مقاعد فاضية فعلًا في حدود المسافة)
+    _greedy([p for p in extra_pairs if p[2] not in res])
 
     for i in range(n):
         if i not in res and not reason[i]:
@@ -782,7 +826,7 @@ def distribute(S, C, max_km=MAX_KM, progress=lambda p, m: None, road_mode="facto
     by_level = by_level.merge(seats_lv, on="level_code", how="left")
 
     # العجز: طلاب (محافظة × ليفيل) مقابل مقاعد نفس المحافظة
-    seats_g = load.assign(gov_l=load["gov"].str.lower()).groupby(["gov_l", "level_code"]).capacity.sum()
+    seats_g = load.assign(gov_l=load["gov"].astype(str).str.strip().str.lower()).groupby(["gov_l", "level_code"]).capacity.sum()
     dem = out.groupby(["gov_code", "level_code"]).size()
     dem_vp = out[out._vp].groupby(["gov_code", "level_code"]).size()
     dem_ass = out[~out._vp].groupby(["gov_code", "level_code"]).size()

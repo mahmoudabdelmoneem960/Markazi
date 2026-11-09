@@ -158,7 +158,7 @@ def prepare(S, C, mode="auto", max_km=50, progress=lambda p, m: None, con=None, 
         if gov_col:
             for i, g in enumerate(S[gov_col]):
                 if g not in gcache:
-                    gcache[g] = gn.gov_code(g)
+                    gcache[g] = engine.gov_code(g)
                 gcode[i] = gcache[g]
         areas = S[area_col].fillna("").astype(str).to_numpy(object) if area_col else np.full(n, "", dtype=object)
         addrs = S[addr_col].fillna("").astype(str).to_numpy(object) if addr_col else np.full(n, "", dtype=object)
@@ -206,7 +206,7 @@ def prepare(S, C, mode="auto", max_km=50, progress=lambda p, m: None, con=None, 
             centers_rows = [{"code": r["code"], "gov": r["gov"], "area": r["area"], "lat": r["lat"], "lon": r["lon"]}
                             for r in con.execute("SELECT code,gov,area,lat,lon FROM centers WHERE lat IS NOT NULL")]
             anchors_fp = hashlib.md5(str(sorted((c["code"], round(c["lat"], 5), round(c["lon"], 5)) for c in centers_rows)).encode()).hexdigest()
-            locdb.cache_prepare(con, f"{locdb.gazetteer_fingerprint(gaz)}|{anchors_fp}")
+            locdb.cache_prepare(con, f"{locdb.gazetteer_fingerprint(gaz)}|{anchors_fp}|geo{gc.VERSION}")
             gz = gz_all if gz_all is not None else gc.Geocoder(gaz, centers=centers_rows)   # نفس نقط الارتكاز اللي في فحص المراكز
             keys = [locdb.geo_key(gcode[i], areas[i], addrs[i]) for i in todo]
             uniq = list(dict.fromkeys(keys))

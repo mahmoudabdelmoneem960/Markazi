@@ -16,6 +16,35 @@ def _user():
     return getattr(current_user, "username", "")
 
 
+def _arg_int(name, default, lo=1, hi=100000):
+    """رقم من الـquery string: لو مش رقم بيرجع الافتراضي بدل خطأ 500، ومحصور بين lo و hi."""
+    try:
+        v = int(request.args.get(name) or default)
+    except (TypeError, ValueError):
+        v = default
+    return max(lo, min(hi, v))
+
+
+def _run_params(params):
+    """فحص إعدادات التوزيع قبل ما نبدأ (بدل ما التشغيل يفشل في الخلفية أو برسالة مضللة)."""
+    out = dict(params or {})
+    for k, lo, hi in (("max_km", 1, 500), ("detour", 1, 3)):
+        if out.get(k) in (None, ""):
+            continue
+        try:
+            v = float(out[k])
+        except (TypeError, ValueError):
+            raise ValueError(f"قيمة {k} لازم تكون رقم.")
+        if not lo <= v <= hi:
+            raise ValueError(f"قيمة {k} لازم تكون بين {lo} و {hi}.")
+        out[k] = v
+    if out.get("road_mode") not in (None, "osrm", "factor"):
+        raise ValueError("طريقة حساب المسافة لازم osrm أو factor.")
+    if out.get("geo_mode") not in (None, "auto", "addr", "sheet"):
+        raise ValueError("مصدر المواقع لازم auto أو addr أو sheet.")
+    return out
+
+
 def _json():
     d = request.get_json(silent=True)
     if not isinstance(d, dict):
@@ -165,7 +194,10 @@ def runs_create():
     d = _json()
     if not d or not d.get("token"):
         return jsonify(error="الطلب ناقص"), 400
-    params = d.get("params") or {}
+    try:
+        params = _run_params(d.get("params"))
+    except ValueError as e:
+        return jsonify(error=str(e)), 400
     if params.get("road_mode") == "osrm":
         ok, msg, _ = engine.osrm_check(params.get("osrm_url") or config.OSRM_URL)
         if not ok:
@@ -231,13 +263,13 @@ def run_center_details(run_id, code):
 def run_students(run_id):
     a = request.args
     return jsonify(runs.students_points(run_id, center=a.get("center"), gov=a.get("gov"), status=a.get("status"),
-                                        level=a.get("level"), limit=int(a.get("limit") or 6000)))
+                                        level=a.get("level"), limit=_arg_int("limit", 6000)))
 
 
 @bp.route("/runs/<run_id>/students/invalid_nids")
 def run_invalid_nids(run_id):
-    p = int(request.args.get("page") or 1)
-    pp = int(request.args.get("per_page") or 50)
+    p = _arg_int("page", 1)
+    pp = _arg_int("per_page", 50)
     q = request.args.get("q", "")
     try:
         return jsonify(runs.get_invalid_nids(run_id, page=p, per_page=pp, search=q))
@@ -247,8 +279,8 @@ def run_invalid_nids(run_id):
 
 @bp.route("/runs/<run_id>/students/band2")
 def run_band2(run_id):
-    p = int(request.args.get("page") or 1)
-    pp = int(request.args.get("per_page") or 50)
+    p = _arg_int("page", 1)
+    pp = _arg_int("per_page", 50)
     q = request.args.get("q", "")
     try:
         return jsonify(runs.get_band2_students(run_id, page=p, per_page=pp, search=q))
@@ -272,8 +304,8 @@ def run_student_by_row(run_id, row_no):
 
 @bp.route("/runs/<run_id>/students/suspects")
 def run_suspect_students(run_id):
-    p = int(request.args.get("page") or 1)
-    pp = int(request.args.get("per_page") or 50)
+    p = _arg_int("page", 1)
+    pp = _arg_int("per_page", 50)
     try:
         return jsonify(runs.get_suspect_students(run_id, page=p, per_page=pp))
     except ValueError as e:
@@ -292,8 +324,8 @@ def run_fix_suspects(run_id):
 
 @bp.route("/runs/<run_id>/students/far")
 def run_far_students(run_id):
-    p = int(request.args.get("page") or 1)
-    pp = int(request.args.get("per_page") or 50)
+    p = _arg_int("page", 1)
+    pp = _arg_int("per_page", 50)
     q = request.args.get("q", "")
     ft = request.args.get("filter_type", "all")
     try:
@@ -305,7 +337,7 @@ def run_far_students(run_id):
 @bp.route("/runs/<run_id>/students/far_points")
 def run_far_students_points(run_id):
     ft = request.args.get("filter_type", "all")
-    limit = int(request.args.get("limit") or 3000)
+    limit = _arg_int("limit", 3000)
     try:
         return jsonify(runs.get_far_students_points(run_id, filter_type=ft, limit=limit))
     except ValueError as e:
@@ -675,9 +707,9 @@ def review():
     items = rev["items"]
     if q:
         items = [x for x in items if q in x["area"] or q in x["text"] or q in x["sample"] or q in x["gov"]]
-    min_n = int(request.args.get("min_n") or 1)
+    min_n = _arg_int("min_n", 1)
     items = [x for x in items if x["n"] >= min_n]
-    out = items[:int(request.args.get("limit") or 200)]
+    out = items[:_arg_int("limit", 200)]
     con = db.connect()
     try:
         done = locdb.group_overrides_get(con, [x["gkey"] for x in out])

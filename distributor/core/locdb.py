@@ -138,7 +138,7 @@ def parse_coords(text, strict=False):
         if m:
             pairs.append((float(m.group(1)), float(m.group(2))))
     if not pairs:
-        m = re.search(r"[?&](?:q|ll|query|destination" + ("" if strict else "|center") + r")=(-?\d+\.\d+)[, ]\s*(-?\d+\.\d+)", t)
+        m = re.search(r"[?&](?:q|ll|query|destination" + ("" if strict else "|center") + r")=(-?\d+\.\d+)[, +]\s*\+?\s*(-?\d+\.\d+)", t)   # '+' = مسافة متكودة في اللينك
         if m:
             pairs.append((float(m.group(1)), float(m.group(2))))
     if not pairs:

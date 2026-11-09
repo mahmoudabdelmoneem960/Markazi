@@ -20,15 +20,22 @@ GOV_CAPITALS = {
     "aswan": "أسوان", "red_sea": "الغردقة", "new_valley": "الخارجة", "matrouh": "مرسى مطروح", "north_sinai": "العريش",
     "south_sinai": "الطور",
 }
+VERSION = "2026.11.3"    # بيدخل في مفتاح كاش العناوين: أي تعديل في منطق التحديد بيرفع الرقم فالكاش القديم يتحسب تاني
 STREET_STRATEGY = os.environ.get("GEO_STREET", "blend")        # nearest | medoid | blend (blend بيقلل الأخطاء الكبيرة)
+STREET_LOCAL_KM = 2.0       # الوسط بيتحسب من مقاطع الشارع القريبة من أقرب مقطع بس (الشوارع الطويلة زي طريق السويس كانت بتسحب النقطة كيلومترات)
 EST_ERR = {"poi": 100, "street": 300, "locality": 1500, "area": 4000, "markaz": 6000, "gov": 40000}
 LEVEL_CONF = {"poi": 0.90, "street": 0.80, "locality": 0.55, "area": 0.35, "markaz": 0.30, "gov": 0.10}
 
 _STREET_KW = r"(?:شارع|ش|طريق|حاره|ممر|ميدان|كوبري|محور|سكه|نفق)"
 _LANDMARK_KW = r"(?:بجوار|جوار|امام|خلف|بالقرب\s+من|قرب|مقابل|عند|بجانب|بحري|قبلي)"
 _STOP_AFTER = {"من", "بجوار", "جوار", "امام", "خلف", "بالقرب", "قرب", "مقابل", "عند", "بعد", "قبل", "تقاطع", "بجانب",
-               "ب", "و", "علي", "في", "داخل", "الدور", "عمارة", "برج", "منزل", "رقم", "شقه", "بلوك", "عماره"}
+               "ب", "و", "علي", "في", "داخل", "الدور", "عمارة", "برج", "منزل", "رقم", "شقه", "بلوك", "عماره", "متفرع", "المتفرع"}
+# كلمات وقف ممكن تكون جزء من اسم الشارع (شارع محمد علي، شارع عفيفي علي): بنكمّل بعدها، والاسم اللي فيها لازم يطابق بالظبط
+_SOFT_STOP = {"علي", "و"}
 _SPLIT = re.compile(r"\s+[-–—]\s+|[،,;/|\n\r]+|\s{2,}")
+_ADMIN_PREFIX = {"حي", "قسم", "منطقه", "شياخه"}      # كلمات إدارية قبل اسم المكان بتتشال عشان نلاقي الاسم الكامل
+# كلمة واحدة من دول لوحدها مش اسم شارع («شارع مسجد البسيوني» ما يتقريش «شارع المسجد»)
+_STREET_JUNK = {"مدرسه", "مسجد", "جامع", "صيدليه", "بنك", "مستشفي", "كنيسه", "معهد", "كليه"}
 _GENERIC = {"جمهوريه", "نيل", "جيش", "تحرير", "سلام", "مدرسه", "مسجد", "جامع", "صيدليه", "بنك"}
 
 
@@ -156,8 +163,16 @@ class Geocoder:
         if not k:
             return None
         cand = []
-        for e in G["places_full"].get(full, []):
-            cand.append((1.0, e))
+        fulls = [full]
+        ft = full.split()
+        while len(ft) > 2 and ft[0] in _ADMIN_PREFIX:          # «حي مدينة نصر» / «قسم مدينة نصر» = «مدينة نصر»
+            ft = ft[1:]
+            fulls.append(" ".join(ft))
+        for f in fulls:
+            for e in G["places_full"].get(f, []):
+                cand.append((1.0, e))
+            if cand:
+                break
         if not cand:
             for e in G["places"].get(k, []):
                 cand.append((0.97, e))
@@ -172,11 +187,14 @@ class Geocoder:
             cand = [(s, e) for s, e in cand if _km(near[0], near[1], e[0], e[1]) <= max_km]
         if not cand:
             return None
-        # الأعلى تشابهًا، ثم الأقرب لـ near، ثم الأعلى رتبة (مدينة>حي>قرية) ثم الأكبر سكانًا
+        # الأعلى تشابهًا، ثم اللي اسمه الكامل بيشارك كلمات أكتر مع النص («حي مدينة نصر» → «مدينة نصر» مش «النصر»)،
+        # ثم الأقرب لـ near، ثم الأعلى رتبة (مدينة>حي>قرية) ثم الأكبر سكانًا
+        text_toks = set(gn.tokens(text))
+
         def score(c):
             s, e = c
             dist = _km(near[0], near[1], e[0], e[1]) if near else 0
-            return (-s, dist if near else 0, e[2], -e[5])
+            return (-s, -len(text_toks & set(gn.tokens(e[4]))), dist if near else 0, e[2], -e[5])
         cand.sort(key=score)
         s, e = cand[0]
         return e, s
@@ -225,7 +243,7 @@ class Geocoder:
             words = m.group(1).split()
             phrase = []
             for w in words:
-                if w in _STOP_AFTER or re.fullmatch(r"\d+", w):
+                if (w in _STOP_AFTER and w not in _SOFT_STOP) or re.fullmatch(r"\d+", w):
                     if phrase:
                         break
                     continue
@@ -256,12 +274,23 @@ class Geocoder:
         return out
 
     # ---------- التحديد ----------
-    def _ngram_places(self, addr, G, near, max_km, min_rank=1):
+    def _ngram_places(self, addr, G, near, max_km, min_rank=1, streets=True):
         """أسماء أماكن جوه النص الحر. شروط منعًا للمطابقات العشوائية:
-        الاسم يكون كلمتين فأكتر، أو جزء مستقل من العنوان، أو بعد كلمة (حي/مدينة/قرية/منطقة/مركز/قسم...)."""
+        الاسم يكون كلمتين فأكتر، أو جزء مستقل من العنوان، أو بعد كلمة (حي/مدينة/قرية/منطقة/مركز/قسم...).
+        streets=False: نتجاهل الكلام اللي بعد شارع/ش/طريق (اسم الشارع مش منطقة: «ش سعد زغلول» مش قرية سعد زغلول)."""
         found = []
         for seg in self._segments(addr):
             toks = [t for t in gn.tokens(seg) if not re.fullmatch(r"\d+", t)]
+            if not streets:
+                kept, in_st = [], False
+                for t in toks:
+                    if t in gn.STREET_WORDS:
+                        in_st = True
+                    elif in_st and t in _STOP_AFTER and t not in _SOFT_STOP:
+                        in_st = False
+                    if not in_st:
+                        kept.append(t)
+                toks = kept
             core = [t for t in toks if t not in gn.PLACE_WORDS and t not in _STOP_AFTER and t not in gn.STREET_WORDS]
             for n in range(min(4, len(toks)), 0, -1):
                 for i in range(0, len(toks) - n + 1):
@@ -284,7 +313,7 @@ class Geocoder:
                             continue
                         found.append((n, e, d))
         return found
-    def _segments_of(self, name_phrase, G, kind, near, max_km):
+    def _segments_of(self, name_phrase, G, kind, near, max_km, exact_only=False):
         """كل المقاطع (lat, lon, name, sim) لاسم شارع/معلم في حدود max_km من near."""
         k = gn.key(name_phrase, "street" if kind == "streets" else "poi")
         if not k:
@@ -293,6 +322,8 @@ class Geocoder:
         table = G[kind]
         if k in table:
             keys = [(1.0, k)]
+        elif exact_only:
+            return []
         else:
             idx = G["street_tok"] if kind == "streets" else G["poi_tok"]
             keys = self._fuzzy_keys(toks, idx, thr=0.80)[:6]
@@ -315,16 +346,20 @@ class Geocoder:
         full_text = " ".join(([area] if area else []) + segs)
         # 1) المرساة: اسم المنطقة (من الشيت) ثم أول أجزاء العنوان
         anchor, a_name, a_level = None, None, None
+        a_rank = None                               # رتبة مكان المرساة لو جه من اسم المنطقة (1-2 مدينة/مركز، 3+ حي/قرية)
         if area:
             r = self._find_place(area, G, near=cap, max_km=max_cap)
             if r:
                 anchor, a_name, a_level = (r[0][0], r[0][1]), r[0][4], "area"
+                a_rank = r[0][2]
             else:                                   # المنطقة مش في OSM/GeoNames: متوسط مراكز نفس المنطقة
                 ca = self._center_anchor(gov, area, exclude_center)
                 if ca:
                     anchor, a_name, a_level = (ca[0], ca[1]), f"{area} (متوسط {ca[2]} مركز)", "area"
         # لو المنطقة طلعت مدينة المحافظة نفسها (واسعة)، دوّر على اسم أدق جوه العنوان
-        grams = self._ngram_places(addr, G, cap, max_cap, min_rank=1) if (cap or big) else []
+        grams = self._ngram_places(addr, G, cap, max_cap, min_rank=1, streets=False) if (cap or big) else []
+        if not grams and anchor is None and (cap or big):          # مفيش أي اسم منطقة غير اسم الشارع: نستخدمه (زي الأول)
+            grams = self._ngram_places(addr, G, cap, max_cap, min_rank=1)
         grams = [g for g in grams if not a_name or gn.key_full(g[1][4]) != gn.key_full(a_name)]
         if grams:
             # الأطول نافذة، بعدين الأعلى تخصصًا (حي/قرية قبل مدينة)، بعدين الأقرب
@@ -343,8 +378,16 @@ class Geocoder:
         base = anchor or cap
         # 2) الحي/القرية (جوه النص) قريب من المرساة
         loc, l_name = None, None
-        cand = [g for g in self._ngram_places(addr, G, base, 15, min_rank=3)
-                if not a_name or gn.key_full(g[1][4]) != gn.key_full(a_name)] if base else []
+        # مكان اسمه جزء من اسم المنطقة نفسها («… - مدينة نصر» ← حي «النصر») غالبًا مكان تاني بنفس الاسم:
+        # لو المرساة حي/قرية (رتبة 3+) والمكان ده بعيد عنها أكتر من 2 كم بنتجاهله (وإلا الشارع بيتدوّر عليه حوالين المكان الغلط).
+        # لو المرساة مدينة كبيرة (رتبة 1-2، نقطتها ممكن تكون وسط حدود إدارية بعيدة) بنسيبه يحسّن الموقع زي «القاهرة الجديدة».
+        own = set(gn.tokens(area or "")) | set(gn.tokens(a_name or ""))
+
+        def _same_name_elsewhere(g):
+            return (a_rank is not None and a_rank >= 3 and set(gn.key(g[1][4], "place").split()) <= own
+                    and anchor is not None and _km(anchor[0], anchor[1], g[1][0], g[1][1]) > 2.0)
+        cand = [g for g in self._ngram_places(addr, G, base, 15, min_rank=3, streets=False)
+                if (not a_name or gn.key_full(g[1][4]) != gn.key_full(a_name)) and not _same_name_elsewhere(g)] if base else []
         if cand:
             cand.sort(key=lambda g: (-g[0], g[2]))
             loc, l_name = (cand[0][1][0], cand[0][1][1]), cand[0][1][4]
@@ -353,9 +396,15 @@ class Geocoder:
         phrases = self._street_phrases(addr)
         street_sets = []
         for ph in phrases:
-            for kk in range(len(ph.split()), 0, -1):
-                sub = " ".join(ph.split()[:kk])
-                segsx = self._segments_of(sub, G, "streets", center, 5.0 if loc else 9.0)
+            words = ph.split()
+            if words[0] in _SOFT_STOP and len(words) == 1:
+                continue
+            for kk in range(len(words), 0, -1):
+                sub = " ".join(words[:kk])
+                if kk == 1 and len(words) > 1 and gn.key(sub, "street") in _STREET_JUNK:
+                    break                           # «شارع مدرسة الواحة» ما يتقريش «شارع المدرسة» (كلمة عامة لوحدها)
+                segsx = self._segments_of(sub, G, "streets", center, 5.0 if loc else 9.0,
+                                          exact_only=any(w in _SOFT_STOP for w in words[:kk]))
                 if segsx:
                     street_sets.append((sub, segsx))
                     break
@@ -378,8 +427,9 @@ class Geocoder:
             top = max(s[3] for s in segsx)
             segsx = [s for s in segsx if s[3] >= top - 1e-9]
             e = min(segsx, key=lambda s: _km(ref[0], ref[1], s[0], s[1]) if ref else 0)         # الأقرب لمركز المنطقة
-            if STREET_STRATEGY != "nearest" and len(segsx) > 2:
-                med = min(segsx, key=lambda s: sum(_km(s[0], s[1], t[0], t[1]) for t in segsx))     # القطعة الوسطى من الشارع
+            local = [s for s in segsx if _km(e[0], e[1], s[0], s[1]) <= STREET_LOCAL_KM]
+            if STREET_STRATEGY != "nearest" and len(local) > 2:
+                med = min(local, key=lambda s: sum(_km(s[0], s[1], t[0], t[1]) for t in local))     # القطعة الوسطى من الجزء القريب
                 if STREET_STRATEGY == "medoid":
                     e = med
                 else:                                                                              # blend
@@ -406,6 +456,10 @@ class Geocoder:
             lat, lon, level, matched, sim = poi[0], poi[1], "poi", poi[2], poi[3]
         elif street:
             lat, lon, level, matched, sim = street[0], street[1], "street", street[2], street[3]
+            # شارع من غير منطقة ولا حي (اتدوّر عليه حوالين العاصمة): لو اسمه متكرر في أماكن بعيدة في المحافظة يبقى تخمين → مراجعة
+            if anchor is None and loc is None and not street[4] and any(
+                    _km(lat, lon, s[0], s[1]) > 5.0 for s in self._segments_of(street_sets[0][0], G, "streets", None, None)):
+                level, matched = "markaz", f"{matched} (اسم متكرر في المحافظة)"
         elif loc:
             lat, lon, level, matched, sim = loc[0], loc[1], "locality", l_name, 1.0
         elif anchor:

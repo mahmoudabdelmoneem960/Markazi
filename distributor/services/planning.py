@@ -76,7 +76,7 @@ def analyze(S_raw):
         raise ValueError("شيت الطلاب ناقص الأعمدة دي: " + "، ".join(missing))
 
     total = len(S)
-    gov = S[sc["gov"]].map(lambda g: engine.GOV_MAP.get(engine.norm_ar(g))).fillna(UNKNOWN_GOV)
+    gov = S[sc["gov"]].map(engine.gov_code).fillna(UNKNOWN_GOV)
     lvl = S[sc["level"]].map(engine.level_key).fillna(UNKNOWN_LEVEL)
     band = gov.map(lambda g: engine.CITY_BANDS.get(g, "غير محدد"))
     df = pd.DataFrame({"gov": gov, "level": lvl, "band": band})

@@ -47,7 +47,7 @@ def preflight(S_raw, C_raw):
         st["nid_invalid"] = st["nid_dup"] = None
         _issue(issues, "warn", "مفيش عمود رقم قومي: النتيجة هتتعرّف بالصف بس (row_no).")
     if sc["gov"]:
-        gov_codes = S[sc["gov"]].map(lambda g: engine.GOV_MAP.get(engine.norm_ar(g)))
+        gov_codes = S[sc["gov"]].map(engine.gov_code)
         unk = S.loc[gov_codes.isna(), sc["gov"]].astype(str).str.strip()
         st["unknown_gov"] = unk.value_counts().head(10).to_dict()
         st["unknown_gov_count"] = int(gov_codes.isna().sum())
@@ -122,10 +122,11 @@ def preflight(S_raw, C_raw):
         _issue(issues, "warn", f"{ct['dup_groups']} كود جروب مكرر في الشيت.")
     codes = C[cc["code"]].astype(str)
     ct["centers"] = int(codes.nunique())
-    ct["seats"] = int(cap.sum())
+    valid = keys.notna()                       # الجروبات اللي كودها غلط بتتجاهل في التوزيع، فمقاعدها ما تتحسبش هنا كمان
+    ct["seats"] = int(cap[valid].sum())
     cgov = C[cc["city"]].astype(str).str.strip().str.lower()
     ct["levels"] = cap.groupby(keys).sum().to_dict()
-    ct["govs"] = cap.groupby(cgov).sum().to_dict()
+    ct["govs"] = cap[valid].groupby(cgov[valid]).sum().to_dict()
     has_coords = set()
     if cc["lat"] and cc["lon"]:
         la = pd.to_numeric(C[cc["lat"]], errors="coerce")

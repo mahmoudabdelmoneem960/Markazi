@@ -34,6 +34,14 @@ def users_count():
         con.close()
 
 
+def _safe_next(nxt):
+    """بعد الدخول نرجع لصفحة جوه السيستم بس (مسار نسبي) — مش لموقع تاني (open redirect)."""
+    nxt = (nxt or "").strip()
+    if not nxt.startswith("/") or nxt.startswith("//") or "\\" in nxt:
+        return None
+    return nxt
+
+
 def _valid_password(pw):
     return isinstance(pw, str) and len(pw) >= 8
 
@@ -73,7 +81,7 @@ def login():
             con.close()
         if r and check_password_hash(r["pw_hash"], pw):
             login_user(User(r), remember=True)
-            return redirect(request.args.get("next") or url_for("pages.dashboard"))
+            return redirect(_safe_next(request.args.get("next")) or url_for("pages.dashboard"))
         return render_template("login.html", error="اسم المستخدم أو كلمة السر غلط."), 401
     return render_template("login.html")
 

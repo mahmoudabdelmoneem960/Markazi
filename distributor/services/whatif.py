@@ -8,6 +8,8 @@ from distributor.services import runs
 
 def simulate(run_id, center_code, level_code, capacity, n_groups=1, osrm_url=None):
     """بيرجّع: عدد المقاعد الجديدة، الـVP المرشحين (في حدود المسافة)، كام هيتحلّوا، وقايمة الأقرب."""
+    if int(capacity) <= 0 or int(n_groups) <= 0:
+        raise ValueError("سعة الجروب وعدد الجروبات لازم يكونوا أكبر من صفر.")
     res = runs.load_result(run_id)
     st = runs.load_students(run_id)
     cen = {c["center_code"]: c for c in runs.centers_geo(run_id)}

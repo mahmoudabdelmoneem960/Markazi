@@ -30,7 +30,7 @@ KEY_RE = re.compile(r"^[A-Za-z0-9_\-]{20,}$")
 EMPTY_WORDS = ("nan", "none", "null")
 
 GOV_AR = {"alexandria": "الإسكندرية", "cairo": "القاهرة", "giza": "الجيزة", "qalyubia": "القليوبية", "dakahlia": "الدقهلية",
-          "sharqia": "الشرقية", "gharbia": "الغربية", "menoufia": "المنوفية", "beheira": "البحيرة", "sohag": "سوهاج",
+          "sharqia": "الشرقية", "gharbia": "الغربية", "monufia": "المنوفية", "menoufia": "المنوفية", "beheira": "البحيرة", "sohag": "سوهاج",
           "damietta": "دمياط", "fayoum": "الفيوم", "minya": "المنيا", "beni_suef": "بني سويف", "kafr_el_sheikh": "كفر الشيخ",
           "port_said": "بورسعيد", "suez": "السويس", "ismailia": "الإسماعيلية", "south_sinai": "جنوب سيناء",
           "new_valley": "الوادي الجديد", "north_sinai": "شمال سيناء", "assiut": "أسيوط", "luxor": "الأقصر", "aswan": "أسوان",

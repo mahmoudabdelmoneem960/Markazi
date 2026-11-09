@@ -7,12 +7,13 @@ from distributor.services import runs
 
 
 def _sheet_name(s, used):
-    s = re.sub(r"[\[\]:*?/\\]", " ", str(s)).strip()[:28] or "sheet"
+    """اسم شيت صالح لـ Excel: بدون الحروف الممنوعة، أقل من 31 حرف، ومش مكرر (Excel مش بيفرّق بين capital و small)."""
+    s = re.sub(r"[\[\]:*?/\\]", " ", str(s)).strip().strip("'")[:28] or "sheet"
     base, k = s, 1
-    while s in used:
+    while s.lower() in used:
         k += 1
         s = f"{base[:25]}~{k}"
-    used.add(s)
+    used.add(s.lower())
     return s
 
 
@@ -36,7 +37,8 @@ def per_center_xlsx(run_id):
         for (code, name), g in ok.groupby(["center_code", "center_name"], sort=True):
             g.sort_values(["group_code", "distance_km"])[keep].to_excel(w, sheet_name=_sheet_name(code, used), index=False)
         vp = st[st["status"] == "VP"]
-        vcols = [c for c in (nid, "gov", "البند", "Area", "Adress", "level_code", "nearest_center", "distance_km", "note") if c in vp.columns]
-        for gov, g in vp.groupby("gov", sort=True):
+        gov_col = next((c for c in st.columns if c.strip().lower() in ("gov", "governorate", "المحافظة", "المحافظه")), "gov_code")
+        vcols = [c for c in (nid, gov_col, "البند", "Area", "Adress", "level_code", "nearest_center", "distance_km", "note") if c in vp.columns]
+        for gov, g in vp.groupby(gov_col, sort=True):
             g[vcols].to_excel(w, sheet_name=_sheet_name(f"VP {gov}", used), index=False)
     return p
