@@ -373,6 +373,43 @@ def compare_xlsx():
                     headers={"Content-Disposition": f"attachment; filename=compare_{a}_{b}.xlsx"})
 
 
+@bp.route("/compare/external", methods=["POST"])
+def compare_external_upload():
+    """رفع تشغيلة خارجية (شيت توزيع من برا السيستم) وربطها بتشغيلة من السيستم للمقارنة."""
+    from distributor.services import external
+    f, run_id = request.files.get("file"), (request.form.get("run") or "").strip()
+    if not f:
+        return jsonify(error="ارفع شيت التوزيع الخارجي."), 400
+    if not run_id or not run_id.isalnum():
+        return jsonify(error="اختار تشغيلة السيستم اللي هتتقارن بيها."), 400
+    try:
+        meta = external.import_sheet(run_id, f.filename or "external.xlsx", f.read(), user=_user())
+    except ValueError as e:
+        return jsonify(error=str(e)), 400
+    db_con = db.connect()
+    try:
+        db.audit(db_con, _user(), "external_upload", meta["id"], {"run": run_id, "name": meta["name"], "rows": meta["rows"]})
+    finally:
+        db_con.close()
+    return jsonify(meta)
+
+
+@bp.route("/compare/externals")
+def compare_external_list():
+    from distributor.services import external
+    run_id = request.args.get("run") or None
+    return jsonify(external.list_external(run_id))
+
+
+@bp.route("/compare/external/<eid>", methods=["DELETE"])
+def compare_external_delete(eid):
+    from distributor.services import external
+    if not external.is_external(eid):
+        return jsonify(error="not found"), 404
+    external.delete(eid)
+    return jsonify(ok=True)
+
+
 # ---------------- التخطيط ----------------
 def _cap(v):
     try:

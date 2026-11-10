@@ -44,12 +44,24 @@ def headline(df):
             "over_20km": int((d > 20).sum())}
 
 
+def _load(run_or_ext):
+    """نتيجة تشغيلة من السيستم، أو تشغيلة خارجية مرفوعة (id بيبدأ بـ ext)."""
+    from distributor.services import external
+    return external.load_students(run_or_ext) if external.is_external(run_or_ext) else runs.load_students(run_or_ext)
+
+
 def compare(a_id, b_id, max_changed=3000):
-    A, B = runs.load_students(a_id), runs.load_students(b_id)
+    from distributor.services import external
+    A, B = _load(a_id), _load(b_id)
     if A is None or B is None:
         raise ValueError("أحد التشغيلين مالوش ملف نتيجة (لسه شغال أو اتمسح).")
     A, B = _prep(A), _prep(B)
     ka, kb = _key_col(A), _key_col(B)
+    if external.is_external(b_id) or external.is_external(a_id):
+        # الملف الخارجي بيتربط بالرقم القومي دايمًا (رقم الصف في ملفين مختلفين مالوش معنى)
+        ka, kb = "Student NID", "Student NID"
+        if ka not in A.columns or kb not in B.columns:
+            raise ValueError("المقارنة مع ملف خارجي محتاجة الرقم القومي في الاتنين.")
     key_name = "الرقم القومي" if ka != "row_no" and kb != "row_no" else "رقم الصف"
     if key_name == "رقم الصف":
         ka = kb = "row_no"
@@ -94,9 +106,15 @@ def compare(a_id, b_id, max_changed=3000):
     ch["center_b"] = b.loc[ch_mask, "center_code"].to_numpy()
     ch["dist_b"] = b.loc[ch_mask, "distance_km"].to_numpy()
     changed = ch.astype(object).where(ch.notna(), None)
-    return {"a": {"id": a_id, **headline(A)}, "b": {"id": b_id, **headline(B)}, "pair": pair, "by_gov": gov_rows,
-            "changed_total": int(ch_mask.sum()), "changed": changed.head(max_changed).to_dict("records"),
-            "changed_cols": list(changed.columns)}
+    out = {"a": {"id": a_id, **headline(A)}, "b": {"id": b_id, **headline(B)}, "pair": pair, "by_gov": gov_rows,
+           "changed_total": int(ch_mask.sum()), "changed": changed.head(max_changed).to_dict("records"),
+           "changed_cols": list(changed.columns)}
+    for side, x in (("a", a_id), ("b", b_id)):
+        if external.is_external(x):
+            out[side]["external"] = True
+            out["external"] = {**(external.load_meta(x) or {}), "side": side,
+                               "issues": external.load_issues(x).head(max_changed).to_dict("records")}
+    return out
 
 
 def compare_xlsx(a_id, b_id):
@@ -108,4 +126,13 @@ def compare_xlsx(a_id, b_id):
         pd.DataFrame([r["pair"]]).to_excel(w, sheet_name="المقارنة", index=False)
         pd.DataFrame(r["by_gov"]).to_excel(w, sheet_name="حسب المحافظة", index=False)
         pd.DataFrame(r["changed"], columns=r["changed_cols"]).to_excel(w, sheet_name="طلاب نتيجتهم اتغيرت", index=False)
+        ext = r.get("external")
+        if ext:
+            from distributor.services import external
+            iss = external.load_issues(ext["id"])
+            pd.DataFrame([{"المشكلة": external.PROBLEMS[k], "العدد": v} for k, v in ext["counts"].items()]).to_excel(
+                w, sheet_name="فحص الملف الخارجي", index=False)
+            iss.rename(columns={"key": "الرقم القومي", "row_no": "الصف في الملف", "problem_ar": "المشكلة", "center": "المركز",
+                                "group": "الجروب", "details": "التفاصيل"}).drop(columns=["problem"]).to_excel(
+                w, sheet_name="مشاكل الملف الخارجي", index=False)
     return buf.getvalue()
