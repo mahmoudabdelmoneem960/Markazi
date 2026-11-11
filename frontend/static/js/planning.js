@@ -488,6 +488,9 @@ function renderCodes() {
   table("#cd_levels", [["level", "Level"], ["track", "Track"], ["A", "A · الجمعة"], ["B", "B · السبت"],
     ["groups", "الإجمالي", v => `<b>${n(v)}</b>`], ["students", "الطلاب"]], s.levels);
   $("#cd_govs_wrap").hidden = !phys;
+  // Online مفيهوش جدول محافظات: جدول الليفيلات ياخد عرض الكارت كله وطوله كامل من غير سكرول جوّاه
+  $("#cd_grid").style.gridTemplateColumns = phys ? "" : "1fr";
+  $("#cd_levels_wrap").style.maxHeight = phys ? "330px" : "none";
   if (phys) table("#cd_govs", [["gov3", "Gov", v => `<b>${esc(v)}</b>`], ["gov", "المحافظة"], ["A", "A"], ["B", "B"],
     ["groups", "الإجمالي", v => `<b>${n(v)}</b>`], ["students", "الطلاب"]], s.govs);
   const keep = (id, opts, all) => { const v = $(id).value; $(id).innerHTML = `<option value="">${all}</option>` + opts; if ([...$(id).options].some(o => o.value === v)) $(id).value = v; };

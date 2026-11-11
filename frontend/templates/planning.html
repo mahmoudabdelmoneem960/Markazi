@@ -52,6 +52,18 @@
   <div class="kpis k7" id="kpis" style="margin-top:12px"></div>
   <div class="hint" id="p_notes" style="margin-bottom:14px"></div>
 
+  <div class="card">
+    <div class="card-header-clean">
+      <h2><span>🧮</span> كل ليفيل في كل محافظة</h2>
+      <select id="f_matrix" class="inline" onchange="renderMatrix()" style="min-width:180px">
+        <option value="both">الطلاب + الجروبات</option>
+        <option value="students">عدد الطلاب</option>
+        <option value="groups">عدد الجروبات المطلوبة</option>
+      </select>
+    </div>
+    <div class="scroll tall"><table id="t_matrix"></table></div>
+  </div>
+
   <div class="card" id="cd_card">
     <div class="card-header-clean">
       <h2><span>🏷️</span> أكواد الجروبات <span class="pill brand" id="cd_type"></span></h2>
@@ -62,10 +74,10 @@
     <div id="cd_body" hidden>
       <div class="kpis" id="cd_kpis" style="margin-bottom:12px"></div>
       <div class="hint bad" id="cd_excluded" hidden></div>
-      <div class="grid2" style="align-items:start;gap:14px">
+      <div class="grid2" id="cd_grid" style="align-items:start;gap:14px">
         <div>
           <div class="small mute" style="margin-bottom:4px">الجروبات في كل ليفيل (نص الجمعة ونص السبت):</div>
-          <div class="scroll" style="max-height:330px"><table id="cd_levels"></table></div>
+          <div class="scroll" id="cd_levels_wrap" style="max-height:330px"><table id="cd_levels"></table></div>
         </div>
         <div id="cd_govs_wrap">
           <div class="small mute" style="margin-bottom:4px">الجروبات في كل محافظة:</div>
@@ -133,18 +145,6 @@
   <div class="card">
     <div class="card-header-clean"><h2><span>🎯</span> الليفيلات (مرتبة بعدد الطلاب)</h2></div>
     <div class="scroll"><table id="t_levels"></table></div>
-  </div>
-
-  <div class="card">
-    <div class="card-header-clean">
-      <h2><span>🧮</span> كل ليفيل في كل محافظة</h2>
-      <select id="f_matrix" class="inline" onchange="renderMatrix()" style="min-width:180px">
-        <option value="both">الطلاب + الجروبات</option>
-        <option value="students">عدد الطلاب</option>
-        <option value="groups">عدد الجروبات المطلوبة</option>
-      </select>
-    </div>
-    <div class="scroll tall"><table id="t_matrix"></table></div>
   </div>
 </div>
 {% endblock %}
